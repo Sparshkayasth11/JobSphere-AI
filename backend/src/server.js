@@ -2,22 +2,13 @@ import express, {} from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import multer from "multer";
-import { PDFParse } from "pdf-parse";
+import pdfParse from "pdf-parse";
 import { randomUUID } from "node:crypto";
 import { mkdirSync, unlinkSync } from "node:fs";
 import { dirname, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 // Import resume agent logic
 import { parseResumeText, calculateJobMatch } from "./resumeAgent.js";
-async function pdfParse(dataBuffer) {
-    const parser = new PDFParse({ data: dataBuffer });
-    try {
-        return await parser.getText();
-    }
-    finally {
-        await parser.destroy();
-    }
-}
 const backendDirectory = dirname(fileURLToPath(import.meta.url));
 const uploadsDirectory = resolve(backendDirectory, "../uploads");
 mkdirSync(uploadsDirectory, { recursive: true });
