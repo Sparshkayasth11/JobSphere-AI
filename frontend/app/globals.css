@@ -534,6 +534,10 @@
   color: var(--accent);
 }
 
+.save-btn.is-saved {
+  color: var(--accent);
+}
+
 .save-btn svg {
   width: 16px;
   height: 16px;

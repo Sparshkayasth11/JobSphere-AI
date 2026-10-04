@@ -607,6 +607,8 @@ const [sendingInterviewNotification, setSendingInterviewNotification] = useState
  const [salaryBenchmarkError, setSalaryBenchmarkError] = useState("");
  const salaryBenchmarkRequest = useRef<AbortController | null>(null);
  const [appliedJobIds, setAppliedJobIds] = useState<string[]>([]);
+ const [savedJobIds, setSavedJobIds] = useState<string[]>([]);
+ const [savedJobsLoaded, setSavedJobsLoaded] = useState(false);
  const [statusFilter, setStatusFilter] = useState<string>("All");
  const [searchTerm, setSearchTerm] = useState("");
  const [selectedCandidate, setSelectedCandidate] = useState<any | null>(null);
@@ -662,6 +664,35 @@ useEffect(() => {
     console.error("Failed to save applications locally:", err);
   }
 }, [applicationDataLoaded, appliedJobIds, applications]);
+
+useEffect(() => {
+  try {
+    const storedSavedJobIds = localStorage.getItem("savedJobIds");
+    if (storedSavedJobIds) {
+      const parsedSavedJobIds: unknown = JSON.parse(storedSavedJobIds);
+      if (Array.isArray(parsedSavedJobIds)) {
+        setSavedJobIds(
+          [...new Set(parsedSavedJobIds.filter(
+            (jobId): jobId is string => typeof jobId === "string",
+          ))],
+        );
+      }
+    }
+  } catch (error) {
+    console.error("Failed to load saved jobs:", error);
+  } finally {
+    setSavedJobsLoaded(true);
+  }
+}, []);
+
+useEffect(() => {
+  if (!savedJobsLoaded) return;
+  try {
+    localStorage.setItem("savedJobIds", JSON.stringify(savedJobIds));
+  } catch (error) {
+    console.error("Failed to save favorite jobs locally:", error);
+  }
+}, [savedJobsLoaded, savedJobIds]);
 
 useEffect(() => {
   const loadAdminCandidates = async () => {
@@ -904,7 +935,7 @@ const handleGenerateCoverLetter = async (jobTitle: string, company: string) => {
     }
   };
 
-  const [activeTab, setActiveTab] = useState<"all" | "applied">("all");
+  const [activeTab, setActiveTab] = useState<"all" | "applied" | "saved">("all");
   useEffect(() => {
   const fetchAppliedJobs = async () => {
     try {
@@ -1095,7 +1126,11 @@ const saveInterviewSchedule = async (event: FormEvent<HTMLFormElement>) => {
 };
 const filteredJobs = jobs.filter((job: any) => {
   const matchesTab =
-    activeTab === "all" ? true : appliedJobIds.includes(job.id);
+    activeTab === "all"
+      ? true
+      : activeTab === "applied"
+        ? appliedJobIds.includes(job.id)
+        : savedJobIds.includes(job.id);
 
   const roleQuery = search ? search.toLowerCase().trim() : "";
   const locQuery = location ? location.toLowerCase().trim() : "";
@@ -1110,6 +1145,13 @@ const filteredJobs = jobs.filter((job: any) => {
 
   return matchesTab && matchesRole && matchesLoc;
 });
+const toggleSavedJob = (jobId: string) => {
+  setSavedJobIds((currentSavedJobIds) =>
+    currentSavedJobIds.includes(jobId)
+      ? currentSavedJobIds.filter((savedJobId) => savedJobId !== jobId)
+      : [...currentSavedJobIds, jobId],
+  );
+};
 const displayedJobs = showAllJobs ? filteredJobs : filteredJobs.slice(0, 6);
 const getMatchScore = (jobSkills: string[]) => {
   return calculateSkillMatch(userSkills, jobSkills);
@@ -1709,6 +1751,16 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
   >
     Applied Jobs ({appliedJobIds.length})
   </button>
+  <button
+    onClick={() => setActiveTab("saved")}
+    className={`px-4 py-2 font-medium rounded-lg transition-colors ${
+      activeTab === "saved"
+        ? "bg-green-500/20 text-green-400 border border-green-500/30"
+        : "text-gray-400 hover:text-white"
+    }`}
+  >
+    Saved Jobs ({savedJobIds.length})
+  </button>
 </div>
             <button
               className="view-all"
@@ -1822,11 +1874,22 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                     </div>
 
                     <button
-                      className="save-btn"
-                      aria-label="Save job"
-                      onClick={() => console.log("Saved job:", job.title)}
+                      className={`save-btn ${
+                        savedJobIds.includes(job.id) ? "is-saved" : ""
+                      }`}
+                      type="button"
+                      aria-label={
+                        savedJobIds.includes(job.id)
+                          ? `Remove ${job.title} from saved jobs`
+                          : `Save ${job.title}`
+                      }
+                      aria-pressed={savedJobIds.includes(job.id)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        toggleSavedJob(job.id);
+                      }}
                     >
-                      <HeartIcon />
+                      <HeartIcon filled={savedJobIds.includes(job.id)} />
                     </button>
                   </div>
 
@@ -3420,10 +3483,13 @@ function ArrowIcon() {
   );
 }
 
-function HeartIcon() {
+function HeartIcon({ filled = false }: { filled?: boolean }) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M20.8 8.7c0 5.2-8.8 10.3-8.8 10.3S3.2 13.9 3.2 8.7A4.7 4.7 0 0 1 12 6.2a4.7 4.7 0 0 1 8.8 2.5Z" />
+      <path
+        d="M20.8 8.7c0 5.2-8.8 10.3-8.8 10.3S3.2 13.9 3.2 8.7A4.7 4.7 0 0 1 12 6.2a4.7 4.7 0 0 1 8.8 2.5Z"
+        style={{ fill: filled ? "currentColor" : "none" }}
+      />
     </svg>
   );
 }
