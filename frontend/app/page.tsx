@@ -5,6 +5,25 @@ import toast from 'react-hot-toast';
 
 const API_BASE = "https://jobsphere-ai-zxkj.onrender.com";
 
+async function readApiJson(response: Response): Promise<unknown> {
+  const contentType = response.headers.get("content-type") ?? "";
+  const body = await response.text();
+
+  if (!contentType.toLowerCase().includes("application/json")) {
+    throw new Error(
+      `API ${response.url} returned a non-JSON response (HTTP ${response.status}). Verify the deployed frontend API URL and deployment.`,
+    );
+  }
+
+  try {
+    return JSON.parse(body) as unknown;
+  } catch {
+    throw new Error(
+      `API ${response.url} returned invalid JSON (HTTP ${response.status}).`,
+    );
+  }
+}
+
 type Job = {
   id: string;
   company: string;
@@ -612,7 +631,7 @@ useEffect(() => {
   const loadAdminCandidates = async () => {
     try {
       const response = await fetch(`${API_BASE}/api/admin/candidates`);
-      const result: unknown = await response.json();
+      const result = await readApiJson(response);
       if (
         !response.ok ||
         typeof result !== "object" ||
@@ -635,9 +654,12 @@ useEffect(() => {
       });
     } catch (error) {
       console.warn("Failed to fetch recruiter candidates:", error);
-      toast.error("Backend unavailable. Recruiter data may be out of date.", {
-        id: "backend-unavailable",
-      });
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Unable to load recruiter data from the backend.",
+        { id: "backend-unavailable" },
+      );
     }
   };
 
@@ -851,16 +873,26 @@ const handleGenerateCoverLetter = async (jobTitle: string, company: string) => {
   const fetchAppliedJobs = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/applications`);
-      const data = await res.json();
-      if (data.success && data.appliedJobIds) {
-          const backendJobIds = data.appliedJobIds.map(String);
-          setAppliedJobIds((prev) => [...new Set([...prev, ...backendJobIds])]);
+      const data = await readApiJson(res);
+      if (
+        typeof data === "object" &&
+        data !== null &&
+        "success" in data &&
+        data.success === true &&
+        "appliedJobIds" in data &&
+        Array.isArray(data.appliedJobIds)
+      ) {
+        const backendJobIds = data.appliedJobIds.map(String);
+        setAppliedJobIds((prev) => [...new Set([...prev, ...backendJobIds])]);
       }
     } catch (err) {
       console.warn("Failed to load applied jobs:", err);
-      toast.error("Backend unavailable. Applied job data may be out of date.", {
-        id: "backend-unavailable",
-      });
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Unable to load applied jobs from the backend.",
+        { id: "backend-unavailable" },
+      );
     }
   };
 
