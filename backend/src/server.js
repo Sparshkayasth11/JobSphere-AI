@@ -103,10 +103,25 @@ function getRecommendedRoles(skills) {
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
+const configuredFrontendOrigin = process.env.FRONTEND_URL
+    ? new URL(process.env.FRONTEND_URL).origin
+    : undefined;
+const allowedOrigins = new Set([
+    configuredFrontendOrigin,
+    ...(process.env.NODE_ENV === "production" ? [] : ["http://localhost:3000"]),
+].filter((origin) => Boolean(origin)));
 // =========================
 // MIDDLEWARE & MULTER SETUP
 // =========================
-app.use(cors());
+app.use(cors({
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.has(origin)) {
+            callback(null, true);
+            return;
+        }
+        callback(new Error(`Origin ${origin} is not allowed by CORS`));
+    },
+}));
 app.use(express.json());
 app.use("/uploads", express.static(uploadsDirectory));
 // File upload setup using memory buffer
