@@ -108,15 +108,29 @@ const configuredFrontendOrigin = process.env.FRONTEND_URL
     : undefined;
 const allowedOrigins = new Set([
     configuredFrontendOrigin,
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
 ].filter((origin) => Boolean(origin)));
+const isAllowedOrigin = (origin) => {
+    if (allowedOrigins.has(origin))
+        return true;
+    try {
+        const parsedOrigin = new URL(origin);
+        const isLocalhost = parsedOrigin.protocol === "http:" &&
+            (parsedOrigin.hostname === "localhost" ||
+                parsedOrigin.hostname === "127.0.0.1");
+        const isVercelApp = parsedOrigin.protocol === "https:" &&
+            parsedOrigin.hostname.endsWith(".vercel.app");
+        return isLocalhost || isVercelApp;
+    }
+    catch {
+        return false;
+    }
+};
 // =========================
 // MIDDLEWARE & MULTER SETUP
 // =========================
 app.use(cors({
     origin: (origin, callback) => {
-        if (!origin || allowedOrigins.has(origin)) {
+        if (!origin || isAllowedOrigin(origin)) {
             callback(null, true);
             return;
         }
