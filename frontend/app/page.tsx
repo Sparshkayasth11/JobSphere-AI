@@ -24,6 +24,42 @@ async function readApiJson(response: Response): Promise<unknown> {
   }
 }
 
+async function fetchStartupApiJson(url: string): Promise<unknown> {
+  const retryDelaysMs = [2000, 5000, 10000, 15000];
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= retryDelaysMs.length; attempt += 1) {
+    let response: Response;
+    try {
+      response = await fetch(url);
+    } catch (error) {
+      lastError = error;
+      if (attempt === retryDelaysMs.length) break;
+      await new Promise((resolve) =>
+        setTimeout(resolve, retryDelaysMs[attempt] ?? 0),
+      );
+      continue;
+    }
+
+    if (
+      [404, 502, 503, 504].includes(response.status) &&
+      attempt < retryDelaysMs.length
+    ) {
+      lastError = new Error(`Backend startup returned HTTP ${response.status}.`);
+      await new Promise((resolve) =>
+        setTimeout(resolve, retryDelaysMs[attempt] ?? 0),
+      );
+      continue;
+    }
+
+    return readApiJson(response);
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`Unable to reach backend API at ${url}.`);
+}
+
 type Job = {
   id: string;
   company: string;
@@ -630,10 +666,10 @@ useEffect(() => {
 useEffect(() => {
   const loadAdminCandidates = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/admin/candidates`);
-      const result = await readApiJson(response);
+      const result = await fetchStartupApiJson(
+        `${API_BASE}/api/admin/candidates`,
+      );
       if (
-        !response.ok ||
         typeof result !== "object" ||
         result === null ||
         !("success" in result) ||
@@ -872,8 +908,7 @@ const handleGenerateCoverLetter = async (jobTitle: string, company: string) => {
   useEffect(() => {
   const fetchAppliedJobs = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/applications`);
-      const data = await readApiJson(res);
+      const data = await fetchStartupApiJson(`${API_BASE}/api/applications`);
       if (
         typeof data === "object" &&
         data !== null &&
