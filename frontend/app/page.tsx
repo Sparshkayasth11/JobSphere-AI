@@ -3,10 +3,8 @@
 import { useState, useEffect, useRef, type FormEvent } from "react";
 import toast from 'react-hot-toast';
 
-const API_BASE_URL = (
-  process.env.NEXT_PUBLIC_API_URL ||
-  "https://jobsphere-ai-zxkj.onrender.com"
-).replace(/\/+$/, "");
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || "https://jobsphere-ai-zxkj.onrender.com";
 
 type Job = {
   id: string;
