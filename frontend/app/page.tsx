@@ -163,56 +163,56 @@ function isSalaryBenchmarkResult(
 }
 
 const initialJobs: Job[] = [
-  { id: "1", title: "Frontend Developer", company: "TechNova Solutions", location: "Bhopal, Madhya Pradesh", type: "Full-time", salary: "₹5–8 LPA", skills: ["React", "TypeScript", "CSS"], matchScore: 94, postedDaysAgo: 2 },
-  { id: "2", title: "AI/ML Engineer Intern", company: "DataSphere AI", location: "Bhopal, Madhya Pradesh", type: "Internship", salary: "₹18K–28K / month", skills: ["Python", "Machine Learning", "SQL"], matchScore: 89, postedDaysAgo: 1 },
-  { id: "3", title: "Full Stack Developer", company: "CodeCraft Technologies", location: "Indore, Madhya Pradesh", type: "Full-time", salary: "₹6–10 LPA", skills: ["Next.js", "Node.js", "PostgreSQL"], matchScore: 86, postedDaysAgo: 3 },
-  { id: "4", title: "Backend Developer", company: "Narmada Digital", location: "Jabalpur, Madhya Pradesh", type: "Full-time", salary: "₹5–9 LPA", skills: ["Java", "Spring Boot", "PostgreSQL"], matchScore: 82, postedDaysAgo: 4 },
-  { id: "5", title: "DevOps Engineer", company: "CloudRoute Systems", location: "Bangalore, Karnataka", type: "Full-time", salary: "₹12–20 LPA", skills: ["AWS", "Docker", "Kubernetes"], matchScore: 91, postedDaysAgo: 1 },
-  { id: "6", title: "UI/UX Designer", company: "PixelMint Studio", location: "Pune, Maharashtra", type: "Full-time", salary: "₹7–12 LPA", skills: ["Figma", "Prototyping", "User Research"], matchScore: 84, postedDaysAgo: 5 },
-  { id: "7", title: "Data Analyst", company: "InsightWorks", location: "Hyderabad, Telangana", type: "Full-time", salary: "₹6–10 LPA", skills: ["SQL", "Power BI", "Python"], matchScore: 88, postedDaysAgo: 2 },
-  { id: "8", title: "Android Developer", company: "AppOrbit", location: "Gurgaon, Haryana", type: "Full-time", salary: "₹8–14 LPA", skills: ["Kotlin", "Android", "REST APIs"], matchScore: 79, postedDaysAgo: 6 },
-  { id: "9", title: "QA Automation Engineer", company: "QualityStack", location: "Noida, Uttar Pradesh", type: "Full-time", salary: "₹7–11 LPA", skills: ["Playwright", "TypeScript", "API Testing"], matchScore: 92, postedDaysAgo: 1 },
-  { id: "10", title: "Remote Backend Engineer", company: "OpenBridge Labs", location: "Remote, India", type: "Remote", salary: "₹14–22 LPA", skills: ["Go", "Microservices", "AWS"], matchScore: 87, postedDaysAgo: 3 },
-  { id: "11", title: "React Developer", company: "BrightLoop Technologies", location: "Bangalore, Karnataka", type: "Full-time", salary: "₹8–13 LPA", skills: ["React", "JavaScript", "Redux"], matchScore: 90, postedDaysAgo: 2 },
-  { id: "12", title: "Python Backend Developer", company: "AsterByte", location: "Pune, Maharashtra", type: "Full-time", salary: "₹7–12 LPA", skills: ["Python", "Django", "Redis"], matchScore: 85, postedDaysAgo: 7 },
-  { id: "13", title: "Machine Learning Engineer", company: "NeuralSpring", location: "Hyderabad, Telangana", type: "Full-time", salary: "₹14–24 LPA", skills: ["Python", "PyTorch", "MLOps"], matchScore: 96, postedDaysAgo: 1 },
-  { id: "14", title: "Product Designer (UI/UX)", company: "Northstar Product Co.", location: "Gurgaon, Haryana", type: "Full-time", salary: "₹10–16 LPA", skills: ["Figma", "Design Systems", "Accessibility"], matchScore: 77, postedDaysAgo: 8 },
-  { id: "15", title: "Junior Data Analyst", company: "MetricMind", location: "Indore, Madhya Pradesh", type: "Full-time", salary: "₹4–7 LPA", skills: ["Excel", "SQL", "Tableau"], matchScore: 83, postedDaysAgo: 4 },
-  { id: "16", title: "iOS Developer", company: "BlueKite Mobility", location: "Bangalore, Karnataka", type: "Full-time", salary: "₹10–17 LPA", skills: ["Swift", "SwiftUI", "Core Data"], matchScore: 81, postedDaysAgo: 3 },
-  { id: "17", title: "Full Stack Engineer", company: "CivicTech India", location: "Bhopal, Madhya Pradesh", type: "Full-time", salary: "₹7–11 LPA", skills: ["React", "Node.js", "MongoDB"], matchScore: 93, postedDaysAgo: 1 },
-  { id: "18", title: "Cloud DevOps Associate", company: "InfraPilot", location: "Noida, Uttar Pradesh", type: "Full-time", salary: "₹8–13 LPA", skills: ["Azure", "Terraform", "CI/CD"], matchScore: 74, postedDaysAgo: 9 },
-  { id: "19", title: "Software QA Engineer", company: "Verity Software", location: "Pune, Maharashtra", type: "Full-time", salary: "₹5–9 LPA", skills: ["Selenium", "Java", "Jira"], matchScore: 88, postedDaysAgo: 2 },
-  { id: "20", title: "Frontend Engineering Intern", company: "LaunchPad Digital", location: "Remote, India", type: "Internship", salary: "₹20K–30K / month", skills: ["HTML", "CSS", "React"], matchScore: 68, postedDaysAgo: 5 },
-  { id: "21", title: "Java Backend Engineer", company: "FinAxis Technologies", location: "Hyderabad, Telangana", type: "Full-time", salary: "₹10–16 LPA", skills: ["Java", "Spring Boot", "Kafka"], matchScore: 95, postedDaysAgo: 1 },
-  { id: "22", title: "Data Visualization Analyst", company: "ClearView Analytics", location: "Gurgaon, Haryana", type: "Full-time", salary: "₹7–12 LPA", skills: ["SQL", "Tableau", "Data Modeling"], matchScore: 86, postedDaysAgo: 6 },
-  { id: "23", title: "Flutter Mobile Developer", company: "PocketLabs", location: "Bangalore, Karnataka", type: "Full-time", salary: "₹8–14 LPA", skills: ["Flutter", "Dart", "Firebase"], matchScore: 90, postedDaysAgo: 3 },
-  { id: "24", title: "Platform DevOps Engineer", company: "ScaleGrid Cloud", location: "Remote, India", type: "Remote", salary: "₹16–25 LPA", skills: ["Kubernetes", "Helm", "GCP"], matchScore: 98, postedDaysAgo: 1 },
-  { id: "25", title: "UX Researcher", company: "HumanLayer", location: "Pune, Maharashtra", type: "Full-time", salary: "₹8–13 LPA", skills: ["User Research", "Usability Testing", "Figma"], matchScore: 73, postedDaysAgo: 10 },
-  { id: "26", title: "Node.js API Developer", company: "RelayStack", location: "Noida, Uttar Pradesh", type: "Full-time", salary: "₹7–12 LPA", skills: ["Node.js", "Express", "MongoDB"], matchScore: 84, postedDaysAgo: 4 },
-  { id: "27", title: "Computer Vision Intern", company: "VisionForge AI", location: "Bangalore, Karnataka", type: "Internship", salary: "₹25K–40K / month", skills: ["Python", "OpenCV", "PyTorch"], matchScore: 91, postedDaysAgo: 2 },
-  { id: "28", title: "Part-time Web Developer", company: "LocalWorks Digital", location: "Jabalpur, Madhya Pradesh", type: "Part-time", salary: "₹25K–40K / month", skills: ["WordPress", "JavaScript", "SEO"], matchScore: 70, postedDaysAgo: 7 },
-  { id: "29", title: "Business Data Analyst", company: "PrismPay", location: "Hyderabad, Telangana", type: "Full-time", salary: "₹9–15 LPA", skills: ["SQL", "Python", "Looker"], matchScore: 87, postedDaysAgo: 3 },
-  { id: "30", title: "React Native Developer", company: "UrbanFleet", location: "Gurgaon, Haryana", type: "Full-time", salary: "₹9–15 LPA", skills: ["React Native", "TypeScript", "GraphQL"], matchScore: 80, postedDaysAgo: 5 },
-  { id: "31", title: "Site Reliability Engineer", company: "SignalPeak", location: "Bangalore, Karnataka", type: "Full-time", salary: "₹18–28 LPA", skills: ["Linux", "Prometheus", "AWS"], matchScore: 94, postedDaysAgo: 2 },
-  { id: "32", title: "Accessibility-focused UI Designer", company: "CommonGround Apps", location: "Remote, India", type: "Remote", salary: "₹9–14 LPA", skills: ["Figma", "WCAG", "Design Systems"], matchScore: 78, postedDaysAgo: 8 },
-  { id: "33", title: "Full Stack JavaScript Developer", company: "DevHarbor", location: "Indore, Madhya Pradesh", type: "Full-time", salary: "₹6–10 LPA", skills: ["React", "Node.js", "PostgreSQL"], matchScore: 89, postedDaysAgo: 1 },
-  { id: "34", title: "QA Engineer - API Testing", company: "SecureTrail", location: "Noida, Uttar Pradesh", type: "Full-time", salary: "₹6–10 LPA", skills: ["Postman", "REST APIs", "Automation"], matchScore: 82, postedDaysAgo: 6 },
-  { id: "35", title: "Generative AI Engineer", company: "PromptWorks India", location: "Pune, Maharashtra", type: "Full-time", salary: "₹15–26 LPA", skills: ["Python", "LLMs", "RAG"], matchScore: 97, postedDaysAgo: 1 },
-  { id: "36", title: "Data Analyst Intern", company: "GrowthLedger", location: "Bhopal, Madhya Pradesh", type: "Internship", salary: "₹15K–22K / month", skills: ["Excel", "SQL", "Power BI"], matchScore: 76, postedDaysAgo: 4 },
-  { id: "37", title: "Backend Engineer - Go", company: "PacketBase", location: "Remote, India", type: "Remote", salary: "₹14–23 LPA", skills: ["Go", "PostgreSQL", "gRPC"], matchScore: 90, postedDaysAgo: 2 },
-  { id: "38", title: "Mobile App Developer", company: "CareRoute Health", location: "Hyderabad, Telangana", type: "Full-time", salary: "₹8–13 LPA", skills: ["Kotlin", "Android", "Firebase"], matchScore: 85, postedDaysAgo: 7 },
-  { id: "39", title: "Frontend UI Engineer", company: "CanvasCloud", location: "Pune, Maharashtra", type: "Full-time", salary: "₹9–15 LPA", skills: ["Vue.js", "TypeScript", "CSS"], matchScore: 88, postedDaysAgo: 3 },
-  { id: "40", title: "Machine Learning Research Associate", company: "DeepField Research", location: "Bangalore, Karnataka", type: "Full-time", salary: "₹12–20 LPA", skills: ["Python", "TensorFlow", "Statistics"], matchScore: 93, postedDaysAgo: 5 },
-  { id: "41", title: "Cloud Infrastructure Engineer", company: "MonsoonStack", location: "Gurgaon, Haryana", type: "Full-time", salary: "₹13–21 LPA", skills: ["AWS", "Terraform", "Linux"], matchScore: 86, postedDaysAgo: 2 },
-  { id: "42", title: "Product Data Analyst", company: "LoopCart", location: "Noida, Uttar Pradesh", type: "Full-time", salary: "₹8–14 LPA", skills: ["SQL", "Python", "Experimentation"], matchScore: 92, postedDaysAgo: 1 },
-  { id: "43", title: "Part-time QA Tester", company: "TestBench Studio", location: "Indore, Madhya Pradesh", type: "Part-time", salary: "₹20K–35K / month", skills: ["Manual Testing", "Jira", "Regression Testing"], matchScore: 67, postedDaysAgo: 9 },
-  { id: "44", title: "iOS App Engineer", company: "FinchPay", location: "Pune, Maharashtra", type: "Full-time", salary: "₹12–19 LPA", skills: ["Swift", "UIKit", "REST APIs"], matchScore: 84, postedDaysAgo: 4 },
-  { id: "45", title: "Full Stack Developer Intern", company: "BuildSprint", location: "Hyderabad, Telangana", type: "Internship", salary: "₹20K–32K / month", skills: ["React", "Express", "SQL"], matchScore: 79, postedDaysAgo: 3 },
-  { id: "46", title: "Python Data Engineer", company: "Lakehouse Labs", location: "Remote, India", type: "Remote", salary: "₹13–22 LPA", skills: ["Python", "Spark", "Airflow"], matchScore: 96, postedDaysAgo: 1 },
-  { id: "47", title: "Frontend Developer - Angular", company: "CobaltWorks", location: "Jabalpur, Madhya Pradesh", type: "Full-time", salary: "₹5–9 LPA", skills: ["Angular", "TypeScript", "RxJS"], matchScore: 75, postedDaysAgo: 6 },
-  { id: "48", title: "QA Automation Intern", company: "VerifyNow", location: "Bangalore, Karnataka", type: "Internship", salary: "₹18K–28K / month", skills: ["Cypress", "JavaScript", "Git"], matchScore: 81, postedDaysAgo: 2 },
-  { id: "49", title: "UI/UX Product Designer", company: "PeopleFirst Tech", location: "Bhopal, Madhya Pradesh", type: "Full-time", salary: "₹6–10 LPA", skills: ["Figma", "Interaction Design", "Prototyping"], matchScore: 87, postedDaysAgo: 5 },
-  { id: "50", title: "Full Stack Software Engineer", company: "HorizonWare", location: "Remote, India", type: "Remote", salary: "₹16–26 LPA", skills: ["TypeScript", "Next.js", "AWS"], matchScore: 98, postedDaysAgo: 1 },
+  { id: "1", title: "Frontend Developer", company: "TechNova Solutions", location: "Bhopal, Madhya Pradesh", type: "Full-time", salary: "₹5–8 LPA", skills: ["React", "TypeScript", "CSS"], description: "Build accessible, responsive product interfaces with React and TypeScript; collaborate with design and API teams, and maintain component-level tests.", matchScore: 94, postedDaysAgo: 2 },
+  { id: "2", title: "AI/ML Engineer Intern", company: "DataSphere AI", location: "Bhopal, Madhya Pradesh", type: "Internship", salary: "₹18K–28K / month", skills: ["Python", "Machine Learning", "SQL"], description: "Prepare and analyze datasets, prototype supervised-learning models in Python, and document evaluation results with guidance from the applied AI team.", matchScore: 89, postedDaysAgo: 1 },
+  { id: "3", title: "Full Stack Developer", company: "CodeCraft Technologies", location: "Indore, Madhya Pradesh", type: "Full-time", salary: "₹6–10 LPA", skills: ["Next.js", "Node.js", "PostgreSQL"], description: "Deliver end-to-end product features using Next.js, Node.js, and PostgreSQL, including API integrations, schema changes, and automated tests.", matchScore: 86, postedDaysAgo: 3 },
+  { id: "4", title: "Backend Developer", company: "Narmada Digital", location: "Jabalpur, Madhya Pradesh", type: "Full-time", salary: "₹5–9 LPA", skills: ["Java", "Spring Boot", "PostgreSQL"], description: "Develop Java and Spring Boot services, design REST endpoints, optimize PostgreSQL queries, and contribute to secure, maintainable backend releases.", matchScore: 82, postedDaysAgo: 4 },
+  { id: "5", title: "DevOps Engineer", company: "CloudRoute Systems", location: "Bangalore, Karnataka", type: "Full-time", salary: "₹12–20 LPA", skills: ["AWS", "Docker", "Kubernetes"], description: "Operate AWS workloads, maintain Docker and Kubernetes deployment pipelines, and improve infrastructure monitoring, reliability, and release automation.", matchScore: 91, postedDaysAgo: 1 },
+  { id: "6", title: "UI/UX Designer", company: "PixelMint Studio", location: "Pune, Maharashtra", type: "Full-time", salary: "₹7–12 LPA", skills: ["Figma", "Prototyping", "User Research"], description: "Translate user research into task flows, wireframes, and interactive Figma prototypes; partner with product and engineering through usability reviews.", matchScore: 84, postedDaysAgo: 5 },
+  { id: "7", title: "Data Analyst", company: "InsightWorks", location: "Hyderabad, Telangana", type: "Full-time", salary: "₹6–10 LPA", skills: ["SQL", "Power BI", "Python"], description: "Query operational datasets with SQL and Python, build Power BI dashboards, and communicate trends and data-quality findings to business teams.", matchScore: 88, postedDaysAgo: 2 },
+  { id: "8", title: "Android Developer", company: "AppOrbit", location: "Gurgaon, Haryana", type: "Full-time", salary: "₹8–14 LPA", skills: ["Kotlin", "Android", "REST APIs"], description: "Develop Kotlin-based Android features, integrate REST APIs, resolve defects, and support testing and release workflows across product teams.", matchScore: 79, postedDaysAgo: 6 },
+  { id: "9", title: "QA Automation Engineer", company: "QualityStack", location: "Noida, Uttar Pradesh", type: "Full-time", salary: "₹7–11 LPA", skills: ["Playwright", "TypeScript", "API Testing"], description: "Create maintainable Playwright and TypeScript test suites, validate API contracts, triage regressions, and collaborate with engineers on release quality.", matchScore: 92, postedDaysAgo: 1 },
+  { id: "10", title: "Remote Backend Engineer", company: "OpenBridge Labs", location: "Remote, India", type: "Remote", salary: "₹14–22 LPA", skills: ["Go", "Microservices", "AWS"], description: "Build Go services and versioned APIs for distributed systems, operate workloads on AWS, and contribute to service observability and incident reviews.", matchScore: 87, postedDaysAgo: 3 },
+  { id: "11", title: "React Developer", company: "BrightLoop Technologies", location: "Bangalore, Karnataka", type: "Full-time", salary: "₹8–13 LPA", skills: ["React", "JavaScript", "Redux"], description: "Implement reusable React interfaces, manage shared client state with Redux, and work with design and API teams to ship tested product updates.", matchScore: 90, postedDaysAgo: 2 },
+  { id: "12", title: "Python Backend Developer", company: "AsterByte", location: "Pune, Maharashtra", type: "Full-time", salary: "₹7–12 LPA", skills: ["Python", "Django", "Redis"], description: "Build Django APIs and background workflows, use Redis for caching and queues, and maintain database-backed services with automated tests.", matchScore: 85, postedDaysAgo: 7 },
+  { id: "13", title: "Machine Learning Engineer", company: "NeuralSpring", location: "Hyderabad, Telangana", type: "Full-time", salary: "₹14–24 LPA", skills: ["Python", "PyTorch", "MLOps"], description: "Train and evaluate PyTorch models, package reproducible data and inference pipelines, and collaborate on monitoring and deployment practices for ML systems.", matchScore: 96, postedDaysAgo: 1 },
+  { id: "14", title: "Product Designer (UI/UX)", company: "Northstar Product Co.", location: "Gurgaon, Haryana", type: "Full-time", salary: "₹10–16 LPA", skills: ["Figma", "Design Systems", "Accessibility"], description: "Own product flows from discovery to handoff, maintain Figma design-system components, and incorporate accessibility and usability findings into designs.", matchScore: 77, postedDaysAgo: 8 },
+  { id: "15", title: "Junior Data Analyst", company: "MetricMind", location: "Indore, Madhya Pradesh", type: "Full-time", salary: "₹4–7 LPA", skills: ["Excel", "SQL", "Tableau"], description: "Clean and reconcile business data, write foundational SQL queries, and prepare Excel and Tableau reports with clear notes on assumptions.", matchScore: 83, postedDaysAgo: 4 },
+  { id: "16", title: "iOS Developer", company: "BlueKite Mobility", location: "Bangalore, Karnataka", type: "Full-time", salary: "₹10–17 LPA", skills: ["Swift", "SwiftUI", "Core Data"], description: "Build Swift and SwiftUI app experiences, persist local data with Core Data, and contribute to accessibility, testing, and App Store release readiness.", matchScore: 81, postedDaysAgo: 3 },
+  { id: "17", title: "Full Stack Engineer", company: "CivicTech India", location: "Bhopal, Madhya Pradesh", type: "Full-time", salary: "₹7–11 LPA", skills: ["React", "Node.js", "MongoDB"], description: "Deliver user-facing React features and Node.js APIs, model application data in MongoDB, and participate in code reviews and feature testing.", matchScore: 93, postedDaysAgo: 1 },
+  { id: "18", title: "Cloud DevOps Associate", company: "InfraPilot", location: "Noida, Uttar Pradesh", type: "Full-time", salary: "₹8–13 LPA", skills: ["Azure", "Terraform", "CI/CD"], description: "Support Azure environments using Terraform, maintain CI/CD workflows, and assist with deployment troubleshooting, access controls, and infrastructure documentation.", matchScore: 74, postedDaysAgo: 9 },
+  { id: "19", title: "Software QA Engineer", company: "Verity Software", location: "Pune, Maharashtra", type: "Full-time", salary: "₹5–9 LPA", skills: ["Selenium", "Java", "Jira"], description: "Design and execute Java-based Selenium tests, document defects in Jira, and coordinate regression coverage with developers and product stakeholders.", matchScore: 88, postedDaysAgo: 2 },
+  { id: "20", title: "Frontend Engineering Intern", company: "LaunchPad Digital", location: "Remote, India", type: "Internship", salary: "₹20K–30K / month", skills: ["HTML", "CSS", "React"], description: "Contribute responsive React components using HTML and CSS, fix UI issues, and learn the team’s version-control, review, and testing practices.", matchScore: 68, postedDaysAgo: 5 },
+  { id: "21", title: "Java Backend Engineer", company: "FinAxis Technologies", location: "Hyderabad, Telangana", type: "Full-time", salary: "₹10–16 LPA", skills: ["Java", "Spring Boot", "Kafka"], description: "Build Spring Boot services for transaction workflows, process asynchronous events with Kafka, and maintain API tests and production-ready documentation.", matchScore: 95, postedDaysAgo: 1 },
+  { id: "22", title: "Data Visualization Analyst", company: "ClearView Analytics", location: "Gurgaon, Haryana", type: "Full-time", salary: "₹7–12 LPA", skills: ["SQL", "Tableau", "Data Modeling"], description: "Model reporting datasets with SQL, develop Tableau dashboards, and work with stakeholders to define consistent metrics and explain analytical results.", matchScore: 86, postedDaysAgo: 6 },
+  { id: "23", title: "Flutter Mobile Developer", company: "PocketLabs", location: "Bangalore, Karnataka", type: "Full-time", salary: "₹8–14 LPA", skills: ["Flutter", "Dart", "Firebase"], description: "Create cross-platform mobile features in Flutter and Dart, integrate Firebase services, and support device testing and application-store releases.", matchScore: 90, postedDaysAgo: 3 },
+  { id: "24", title: "Platform DevOps Engineer", company: "ScaleGrid Cloud", location: "Remote, India", type: "Remote", salary: "₹16–25 LPA", skills: ["Kubernetes", "Helm", "GCP"], description: "Maintain Kubernetes platforms and Helm charts on GCP, improve deployment automation, and partner with service teams on capacity and reliability.", matchScore: 98, postedDaysAgo: 1 },
+  { id: "25", title: "UX Researcher", company: "HumanLayer", location: "Pune, Maharashtra", type: "Full-time", salary: "₹8–13 LPA", skills: ["User Research", "Usability Testing", "Figma"], description: "Plan interviews and usability studies, synthesize findings into research artifacts, and collaborate with product designers to validate proposed user flows.", matchScore: 73, postedDaysAgo: 10 },
+  { id: "26", title: "Node.js API Developer", company: "RelayStack", location: "Noida, Uttar Pradesh", type: "Full-time", salary: "₹7–12 LPA", skills: ["Node.js", "Express", "MongoDB"], description: "Develop Express endpoints in Node.js, validate request data, integrate MongoDB persistence, and maintain API documentation and automated tests.", matchScore: 84, postedDaysAgo: 4 },
+  { id: "27", title: "Computer Vision Intern", company: "VisionForge AI", location: "Bangalore, Karnataka", type: "Internship", salary: "₹25K–40K / month", skills: ["Python", "OpenCV", "PyTorch"], description: "Assist with image-data preparation, prototype OpenCV and PyTorch experiments, and report model evaluation results with reproducible notebooks.", matchScore: 91, postedDaysAgo: 2 },
+  { id: "28", title: "Part-time Web Developer", company: "LocalWorks Digital", location: "Jabalpur, Madhya Pradesh", type: "Part-time", salary: "₹25K–40K / month", skills: ["WordPress", "JavaScript", "SEO"], description: "Maintain WordPress websites, implement small JavaScript enhancements, and apply technical SEO checks while coordinating updates with clients.", matchScore: 70, postedDaysAgo: 7 },
+  { id: "29", title: "Business Data Analyst", company: "PrismPay", location: "Hyderabad, Telangana", type: "Full-time", salary: "₹9–15 LPA", skills: ["SQL", "Python", "Looker"], description: "Analyze business and product datasets with SQL and Python, build Looker reporting, and translate stakeholder questions into documented metrics.", matchScore: 87, postedDaysAgo: 3 },
+  { id: "30", title: "React Native Developer", company: "UrbanFleet", location: "Gurgaon, Haryana", type: "Full-time", salary: "₹9–15 LPA", skills: ["React Native", "TypeScript", "GraphQL"], description: "Develop cross-platform React Native features in TypeScript, integrate GraphQL services, and support mobile testing, debugging, and release preparation.", matchScore: 80, postedDaysAgo: 5 },
+  { id: "31", title: "Site Reliability Engineer", company: "SignalPeak", location: "Bangalore, Karnataka", type: "Full-time", salary: "₹18–28 LPA", skills: ["Linux", "Prometheus", "AWS"], description: "Support Linux-based services on AWS, build Prometheus monitoring, participate in incident response, and improve operational runbooks and service reliability.", matchScore: 94, postedDaysAgo: 2 },
+  { id: "32", title: "Accessibility-focused UI Designer", company: "CommonGround Apps", location: "Remote, India", type: "Remote", salary: "₹9–14 LPA", skills: ["Figma", "WCAG", "Design Systems"], description: "Design inclusive product experiences in Figma, apply WCAG guidance to interaction patterns, and help teams maintain accessible design-system components.", matchScore: 78, postedDaysAgo: 8 },
+  { id: "33", title: "Full Stack JavaScript Developer", company: "DevHarbor", location: "Indore, Madhya Pradesh", type: "Full-time", salary: "₹6–10 LPA", skills: ["React", "Node.js", "PostgreSQL"], description: "Build JavaScript product features across React and Node.js, work with PostgreSQL schemas, and contribute to API integration and regression testing.", matchScore: 89, postedDaysAgo: 1 },
+  { id: "34", title: "QA Engineer - API Testing", company: "SecureTrail", location: "Noida, Uttar Pradesh", type: "Full-time", salary: "₹6–10 LPA", skills: ["Postman", "REST APIs", "Automation"], description: "Validate REST API behavior with Postman and automated checks, investigate defects, and maintain test cases for authentication and data workflows.", matchScore: 82, postedDaysAgo: 6 },
+  { id: "35", title: "Generative AI Engineer", company: "PromptWorks India", location: "Pune, Maharashtra", type: "Full-time", salary: "₹15–26 LPA", skills: ["Python", "LLMs", "RAG"], description: "Develop Python-based LLM applications, evaluate retrieval-augmented generation workflows, and document data handling, quality checks, and integration decisions.", matchScore: 97, postedDaysAgo: 1 },
+  { id: "36", title: "Data Analyst Intern", company: "GrowthLedger", location: "Bhopal, Madhya Pradesh", type: "Internship", salary: "₹15K–22K / month", skills: ["Excel", "SQL", "Power BI"], description: "Assist with spreadsheet and SQL data checks, prepare Power BI visuals, and summarize trends for review by the analytics team.", matchScore: 76, postedDaysAgo: 4 },
+  { id: "37", title: "Backend Engineer - Go", company: "PacketBase", location: "Remote, India", type: "Remote", salary: "₹14–23 LPA", skills: ["Go", "PostgreSQL", "gRPC"], description: "Implement Go services and gRPC contracts, maintain PostgreSQL-backed workflows, and contribute to integration tests and distributed-service observability.", matchScore: 90, postedDaysAgo: 2 },
+  { id: "38", title: "Mobile App Developer", company: "CareRoute Health", location: "Hyderabad, Telangana", type: "Full-time", salary: "₹8–13 LPA", skills: ["Kotlin", "Android", "Firebase"], description: "Build Kotlin Android features for health workflows, integrate Firebase services, and collaborate on privacy-conscious testing and app-release readiness.", matchScore: 85, postedDaysAgo: 7 },
+  { id: "39", title: "Frontend UI Engineer", company: "CanvasCloud", location: "Pune, Maharashtra", type: "Full-time", salary: "₹9–15 LPA", skills: ["Vue.js", "TypeScript", "CSS"], description: "Create responsive Vue.js interfaces in TypeScript, maintain shared UI components, and collaborate with design and backend teams on feature delivery.", matchScore: 88, postedDaysAgo: 3 },
+  { id: "40", title: "Machine Learning Research Associate", company: "DeepField Research", location: "Bangalore, Karnataka", type: "Full-time", salary: "₹12–20 LPA", skills: ["Python", "TensorFlow", "Statistics"], description: "Support experiments in Python and TensorFlow, analyze model results statistically, and maintain clear research notes and reproducible evaluation workflows.", matchScore: 93, postedDaysAgo: 5 },
+  { id: "41", title: "Cloud Infrastructure Engineer", company: "MonsoonStack", location: "Gurgaon, Haryana", type: "Full-time", salary: "₹13–21 LPA", skills: ["AWS", "Terraform", "Linux"], description: "Provision AWS infrastructure with Terraform, administer Linux-based environments, and contribute to access management, monitoring, and recovery documentation.", matchScore: 86, postedDaysAgo: 2 },
+  { id: "42", title: "Product Data Analyst", company: "LoopCart", location: "Noida, Uttar Pradesh", type: "Full-time", salary: "₹8–14 LPA", skills: ["SQL", "Python", "Experimentation"], description: "Analyze product funnels with SQL and Python, support experiment design and readouts, and communicate data limitations and findings to product teams.", matchScore: 92, postedDaysAgo: 1 },
+  { id: "43", title: "Part-time QA Tester", company: "TestBench Studio", location: "Indore, Madhya Pradesh", type: "Part-time", salary: "₹20K–35K / month", skills: ["Manual Testing", "Jira", "Regression Testing"], description: "Run structured manual and regression tests, record reproducible issues in Jira, and verify fixes across supported browsers and devices.", matchScore: 67, postedDaysAgo: 9 },
+  { id: "44", title: "iOS App Engineer", company: "FinchPay", location: "Pune, Maharashtra", type: "Full-time", salary: "₹12–19 LPA", skills: ["Swift", "UIKit", "REST APIs"], description: "Implement iOS application flows using Swift and UIKit, integrate REST APIs, and maintain UI tests and release documentation.", matchScore: 84, postedDaysAgo: 4 },
+  { id: "45", title: "Full Stack Developer Intern", company: "BuildSprint", location: "Hyderabad, Telangana", type: "Internship", salary: "₹20K–32K / month", skills: ["React", "Express", "SQL"], description: "Contribute to React interfaces and Express endpoints, write basic SQL queries, and learn team workflows for testing, review, and delivery.", matchScore: 79, postedDaysAgo: 3 },
+  { id: "46", title: "Python Data Engineer", company: "Lakehouse Labs", location: "Remote, India", type: "Remote", salary: "₹13–22 LPA", skills: ["Python", "Spark", "Airflow"], description: "Build Python and Spark data transformations, orchestrate scheduled pipelines with Airflow, and monitor data quality across analytical datasets.", matchScore: 96, postedDaysAgo: 1 },
+  { id: "47", title: "Frontend Developer - Angular", company: "CobaltWorks", location: "Jabalpur, Madhya Pradesh", type: "Full-time", salary: "₹5–9 LPA", skills: ["Angular", "TypeScript", "RxJS"], description: "Develop Angular features in TypeScript, compose asynchronous flows with RxJS, and maintain responsive interfaces and unit-test coverage.", matchScore: 75, postedDaysAgo: 6 },
+  { id: "48", title: "QA Automation Intern", company: "VerifyNow", location: "Bangalore, Karnataka", type: "Internship", salary: "₹18K–28K / month", skills: ["Cypress", "JavaScript", "Git"], description: "Assist with Cypress test automation in JavaScript, reproduce browser issues, and learn collaborative Git workflows and test reporting.", matchScore: 81, postedDaysAgo: 2 },
+  { id: "49", title: "UI/UX Product Designer", company: "PeopleFirst Tech", location: "Bhopal, Madhya Pradesh", type: "Full-time", salary: "₹6–10 LPA", skills: ["Figma", "Interaction Design", "Prototyping"], description: "Map user journeys, prototype interaction patterns in Figma, and prepare clear specifications for product and engineering handoff.", matchScore: 87, postedDaysAgo: 5 },
+  { id: "50", title: "Full Stack Software Engineer", company: "HorizonWare", location: "Remote, India", type: "Remote", salary: "₹16–26 LPA", skills: ["TypeScript", "Next.js", "AWS"], description: "Deliver TypeScript product features with Next.js, integrate application services, and support AWS deployment, code review, and production operations.", matchScore: 98, postedDaysAgo: 1 },
 ];
 
 type ApiJob = {
@@ -1519,7 +1519,7 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         <div className="hero-container">
           <div className="hero-badge">
             <span className="pulse-dot" />
-            AI-powered job discovery
+            Next-generation AI career orchestration
           </div>
 
           <h1>
@@ -1529,8 +1529,9 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
           </h1>
 
           <p className="hero-description">
-            Search thousands of opportunities, understand your match,
-            and let AI help you move from <strong>search to apply.</strong>
+            Bring your skills and goals into focus. Explore relevant roles,
+            understand how your experience aligns, and move from{" "}
+            <strong>discovery to application with confidence.</strong>
           </p>
 
           {/* SEARCH BOX */}
@@ -1654,23 +1655,23 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       <section className="stats-section">
         <div className="stats-container">
           <div className="stat">
-            <strong>25K+</strong>
-            <span>Job opportunities</span>
+            <strong>50+</strong>
+            <span>Curated sample role profiles</span>
           </div>
 
           <div className="stat">
-            <strong>4.8K+</strong>
-            <span>Companies</span>
+            <strong>Skills-first</strong>
+            <span>Role alignment insights</span>
           </div>
 
           <div className="stat">
-            <strong>92%</strong>
-            <span>Average match accuracy</span>
+            <strong>Actionable</strong>
+            <span>Application guidance</span>
           </div>
 
           <div className="stat">
-            <strong>24/7</strong>
-            <span>AI career assistant</span>
+            <strong>AI-assisted</strong>
+            <span>Career preparation tools</span>
           </div>
         </div>
       </section>
@@ -1680,9 +1681,11 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         <div className="section-container">
           <div className="section-heading">
             <div>
-              <span className="eyebrow">OPPORTUNITIES</span>
+              <span className="eyebrow">OPPORTUNITIES · INDICATIVE RANGES</span>
               <h2>
-                Jobs made for <span>you.</span>
+                Relevant roles.
+                <br />
+                <span>Clearer next steps.</span>
               </h2>
             </div>
 <div className="flex gap-4 my-6 border-b border-gray-800 pb-2">
@@ -1948,9 +1951,9 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
             </h2>
 
             <p>
-              Tell JobSphere what you want in plain language. Our AI agents
-              analyze your profile, search opportunities, compare requirements,
-              and explain why a job matches you.
+            Describe your goals in plain language. JobSphere helps you review
+            your profile, explore relevant roles, compare listed skills, and
+            prepare stronger, more focused applications.
             </p>
 
             <button className="ai-button" onClick={() => setIsModalOpen(true)}>
@@ -1983,9 +1986,9 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                 <span className="mini-ai">
                   <SparkIcon />
                 </span>
-                I found <strong>12 opportunities</strong> that match your
-                profile. Your top match is an AI/ML Intern role with an
-                estimated <strong>91% match.</strong>
+                Here are roles aligned with your search. This AI/ML internship
+                is a <strong>sample match</strong> based on the skills in your
+                profile.
               </div>
 
               <div className="mini-job">
@@ -1996,7 +1999,7 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                   <span>DataSphere AI · Bhopal</span>
                 </div>
 
-                <b>91%</b>
+                <b>Match</b>
               </div>
             </div>
           </div>
@@ -2019,28 +2022,28 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
           <div className="steps">
             <div className="step">
               <div className="step-number">01</div>
-              <h3>Build your profile</h3>
+              <h3>AI Profile &amp; Resume Parsing</h3>
               <p>
-                Upload your resume and tell us about your skills, experience,
-                and career goals.
+                Extract key skills, experience level, and domain expertise
+                automatically using intelligent document analysis.
               </p>
             </div>
 
             <div className="step">
               <div className="step-number">02</div>
-              <h3>Let AI match you</h3>
+              <h3>Smart Skill &amp; Gap Matching</h3>
               <p>
-                Our intelligent agents compare your profile with relevant job
-                requirements.
+                Compare applicant profiles against real-time job requisitions and
+                highlight key areas of skill alignment.
               </p>
             </div>
 
             <div className="step">
               <div className="step-number">03</div>
-              <h3>Apply with confidence</h3>
+              <h3>Automated Tailored Applications</h3>
               <p>
-                Understand your match and continue to the original employer
-                application.
+                Generate contextual AI cover letters and direct application
+                insights for seamless submissions.
               </p>
             </div>
           </div>
@@ -2058,10 +2061,10 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
             <small>AI</small>
           </div>
 
-          <p>Intelligent job discovery for the next generation.</p>
+          <p>Next-Generation AI Career Orchestration Platform.</p>
 
           <span className="copyright">
-            © 2026 JobSphere AI. Major Project.
+            © 2026 JobSphere AI. Intelligent tools for a more focused job search.
           </span>
         </div>
       </footer>
