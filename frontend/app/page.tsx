@@ -3,8 +3,7 @@
 import { useState, useEffect, useRef, type FormEvent } from "react";
 import toast from 'react-hot-toast';
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "https://jobsphere-ai-zxkj.onrender.com";
+const API_BASE = "https://jobsphere-ai-zxkj.onrender.com";
 
 type Job = {
   id: string;
@@ -612,7 +611,7 @@ useEffect(() => {
 useEffect(() => {
   const loadAdminCandidates = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/admin/candidates`);
+      const response = await fetch(`${API_BASE}/api/admin/candidates`);
       const result: unknown = await response.json();
       if (
         !response.ok ||
@@ -654,7 +653,7 @@ const fetchSalaryBenchmark = async (job: Job, experienceYears: number) => {
   setSalaryBenchmarkLoading(true);
 
   try {
-    const response = await fetch(`${API_BASE_URL}/api/ai-salary-benchmark`, {
+    const response = await fetch(`${API_BASE}/api/ai-salary-benchmark`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       signal: controller.signal,
@@ -716,7 +715,7 @@ const handleGenerateCoverLetter = async (jobTitle: string, company: string) => {
     setShowCLModal(true);
     setIsGeneratingCL(true);
     try {
-    const res = await fetch(`${API_BASE_URL}/api/generate-cover-letter`, {
+    const res = await fetch(`${API_BASE}/api/generate-cover-letter`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jobTitle, company }),
@@ -762,7 +761,7 @@ const handleGenerateCoverLetter = async (jobTitle: string, company: string) => {
     setInterviewVocabulary([]);
     setInterviewProTip("");
     try {
-      const response = await fetch(`${API_BASE_URL}/api/ai-polish-answer`, {
+      const response = await fetch(`${API_BASE}/api/ai-polish-answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -804,7 +803,7 @@ const handleGenerateCoverLetter = async (jobTitle: string, company: string) => {
 
     setMockInterviewLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/ai-interview-feedback`, {
+      const response = await fetch(`${API_BASE}/api/ai-interview-feedback`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -851,7 +850,7 @@ const handleGenerateCoverLetter = async (jobTitle: string, company: string) => {
   useEffect(() => {
   const fetchAppliedJobs = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/applications`);
+      const res = await fetch(`${API_BASE}/api/applications`);
       const data = await res.json();
       if (data.success && data.appliedJobIds) {
           const backendJobIds = data.appliedJobIds.map(String);
@@ -892,7 +891,7 @@ const handleGenerateCoverLetter = async (jobTitle: string, company: string) => {
     formData.append("resume", applicantResume);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/apply-job`, {
+      const response = await fetch(`${API_BASE}/api/apply-job`, {
         method: "POST",
         body: formData,
       });
@@ -975,7 +974,7 @@ const saveInterviewSchedule = async (event: FormEvent<HTMLFormElement>) => {
   });
   try {
     const notificationResponse = await fetch(
-      `${API_BASE_URL}/api/send-interview-email`,
+      `${API_BASE}/api/send-interview-email`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1057,7 +1056,7 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
   formData.append("resume", file);
 
   try {
-   const res = await fetch(`${API_BASE_URL}/api/upload-resume`, {
+   const res = await fetch(`${API_BASE}/api/upload-resume`, {
      method: "POST",
      body: formData,
    });
@@ -1158,7 +1157,7 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       }
 
       const response = await fetch(
-        `${API_BASE_URL}/api/jobs?${params.toString()}`
+        `${API_BASE}/api/jobs?${params.toString()}`
       );
 
       if (!response.ok) {
