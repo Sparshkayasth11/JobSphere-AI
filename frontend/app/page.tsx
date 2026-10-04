@@ -636,7 +636,10 @@ useEffect(() => {
         ];
       });
     } catch (error) {
-      console.error("Failed to fetch recruiter candidates:", error);
+      console.warn("Failed to fetch recruiter candidates:", error);
+      toast.error("Backend unavailable. Recruiter data may be out of date.", {
+        id: "backend-unavailable",
+      });
     }
   };
 
@@ -868,7 +871,10 @@ const handleGenerateCoverLetter = async (jobTitle: string, company: string) => {
           setAppliedJobIds((prev) => [...new Set([...prev, ...backendJobIds])]);
       }
     } catch (err) {
-      console.error("Failed to load applied jobs:", err);
+      console.warn("Failed to load applied jobs:", err);
+      toast.error("Backend unavailable. Applied job data may be out of date.", {
+        id: "backend-unavailable",
+      });
     }
   };
 

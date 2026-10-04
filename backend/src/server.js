@@ -108,7 +108,8 @@ const configuredFrontendOrigin = process.env.FRONTEND_URL
     : undefined;
 const allowedOrigins = new Set([
     configuredFrontendOrigin,
-    ...(process.env.NODE_ENV === "production" ? [] : ["http://localhost:3000"]),
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
 ].filter((origin) => Boolean(origin)));
 // =========================
 // MIDDLEWARE & MULTER SETUP
