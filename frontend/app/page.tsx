@@ -1367,8 +1367,8 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
   return (
     <main>
       {/* NAVBAR */}
-      <nav className="navbar">
-        <div className="nav-container">
+      <nav className="navbar px-4 py-3 md:px-8">
+        <div className="mx-auto flex w-full max-w-[1240px] items-center justify-between gap-4">
           <a href="#" className="logo">
             <span className="logo-mark">J</span>
             <span>
@@ -1377,36 +1377,45 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
             <small>AI</small>
           </a>
 
-          <div className="nav-links">
+          <div className="hidden items-center gap-8 text-sm text-zinc-300 md:flex">
             <a href="#jobs">Find Jobs</a>
             <a href="#ai">AI Assistant</a>
             <a href="#how">How It Works</a>
             <a href="#about">About</a>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="hidden shrink-0 items-center gap-3 md:flex">
             <a
               href="/pricing"
               className="inline-flex items-center gap-1.5 rounded-md bg-green-500 px-3.5 py-1.5 text-sm font-bold text-black shadow-[0_0_10px_rgba(34,197,94,0.3)]"
             >
               ✨ Pro Plans
             </a>
-            <div className="nav-actions">
+            <div className="flex shrink-0 items-center gap-2">
               <button
-                className="login-btn"
+                className="rounded-lg px-3 py-2 text-sm font-bold text-white transition-colors hover:bg-zinc-800"
                 onClick={() => setIsModalOpen(true)}
               >
                 Upload Resume
               </button>
-              <button className="signup-btn">Get Started</button>
+              <button className="rounded-lg bg-lime-300 px-4 py-2 text-sm font-bold text-zinc-950 transition-colors hover:bg-lime-200">
+                Get Started
+              </button>
             </div>
             <button
               type="button"
               onClick={() => setShowAdminModal(true)}
-              className="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-zinc-700"
+              className="whitespace-nowrap rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-zinc-700"
             >
               🔒 Admin Access
             </button>
           </div>
+          <button
+            type="button"
+            onClick={() => setShowAdminModal(true)}
+            className="shrink-0 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-zinc-700 md:hidden"
+          >
+            🔒 Admin
+          </button>
         </div>
       </nav>
 
