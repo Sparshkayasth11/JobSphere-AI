@@ -11,6 +11,15 @@ import { fileURLToPath } from "node:url";
 // Import resume agent logic
 import { parseResumeText, calculateJobMatch } from "./resumeAgent.js";
 
+async function pdfParse(dataBuffer: Buffer) {
+  const parser = new PDFParse({ data: dataBuffer });
+  try {
+    return await parser.getText();
+  } finally {
+    await parser.destroy();
+  }
+}
+
 type CreateOrderBody = {
   planName?: string;
   amount?: number;
@@ -834,13 +843,8 @@ const analyzeResumeUpload = async (
       req.file.mimetype === "application/pdf" ||
       req.file.originalname.toLowerCase().endsWith(".pdf")
     ) {
-      const pdfParser = new PDFParse({ data: req.file.buffer });
-      try {
-        const pdfData = await pdfParser.getText();
-        if (pdfData.text) resumeText = pdfData.text;
-      } finally {
-        await pdfParser.destroy();
-      }
+      const pdfData = await pdfParse(req.file.buffer);
+      if (pdfData.text) resumeText = pdfData.text;
     }
 
     const { extractedSkills } = parseResumeText(resumeText);

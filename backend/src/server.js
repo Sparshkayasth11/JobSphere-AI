@@ -9,6 +9,15 @@ import { dirname, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 // Import resume agent logic
 import { parseResumeText, calculateJobMatch } from "./resumeAgent.js";
+async function pdfParse(dataBuffer) {
+    const parser = new PDFParse({ data: dataBuffer });
+    try {
+        return await parser.getText();
+    }
+    finally {
+        await parser.destroy();
+    }
+}
 const backendDirectory = dirname(fileURLToPath(import.meta.url));
 const uploadsDirectory = resolve(backendDirectory, "../uploads");
 mkdirSync(uploadsDirectory, { recursive: true });
@@ -569,15 +578,9 @@ const analyzeResumeUpload = async (req, res) => {
         let resumeText = req.file.buffer.toString("utf-8");
         if (req.file.mimetype === "application/pdf" ||
             req.file.originalname.toLowerCase().endsWith(".pdf")) {
-            const pdfParser = new PDFParse({ data: req.file.buffer });
-            try {
-                const pdfData = await pdfParser.getText();
-                if (pdfData.text)
-                    resumeText = pdfData.text;
-            }
-            finally {
-                await pdfParser.destroy();
-            }
+            const pdfData = await pdfParse(req.file.buffer);
+            if (pdfData.text)
+                resumeText = pdfData.text;
         }
         const { extractedSkills } = parseResumeText(resumeText);
         const candidateName = getResumeCandidateName(resumeText, req.file.originalname);
