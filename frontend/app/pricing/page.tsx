@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import toast from 'react-hot-toast';
 
 export default function PricingPage() {
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
@@ -8,15 +9,22 @@ export default function PricingPage() {
 
   const handleSubscribe = async (planName: string, price: string) => {
     setLoadingPlan(planName);
-    
     // Simulate API call / Razorpay / Stripe checkout redirection
     setTimeout(() => {
       if (planName === "Student Pass") {
-        alert(`🎉 Success! Your 1-Day Free Trial for ${planName} (${price}) has been activated. Redirecting to your dashboard...`);
+      toast.success(`Success! Your 1-Day Free Trial for ${planName} (${price}) has been activated.`, {
+  style: { background: '#121212', color: '#00FF66', border: '1px solid #00FF66' },
+  iconTheme: { primary: '#00FF66', secondary: '#121212' },
+});
       } else if (planName === "Pro Membership") {
-        alert(`🚀 Redirecting to secure Razorpay checkout for ${planName} (${price}) [Billed ${billingCycle}]...`);
+      toast.loading(`Redirecting to secure Razorpay checkout for ${planName} (${price}) [Billed ${billingCycle}]...`, {
+  style: { background: '#121212', color: '#00FF66', border: '1px solid #00FF66' },
+});
       } else {
-        alert(`📞 Connecting you with our Enterprise Sales team for ${planName} (${price})...`);
+       toast.success(`Connecting you with our Enterprise Sales team for ${planName} (${price})...`, {
+  style: { background: '#121212', color: '#00FF66', border: '1px solid #00FF66' },
+  iconTheme: { primary: '#00FF66', secondary: '#121212' },
+});;
       }
       setLoadingPlan(null);
       // window.location.href = "/dashboard"; // Baad me dashboard redirect ke liye

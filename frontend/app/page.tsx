@@ -1,58 +1,516 @@
 "use client";
 
-import { useState, useEffect } from "react";
-
+import { useState, useEffect, useRef, type FormEvent } from "react";
+import toast from 'react-hot-toast';
 type Job = {
-  id: number;
+  id: string;
   company: string;
   title: string;
+  description?: string;
+  location: string;
+  type: "Full-time" | "Part-time" | "Internship" | "Remote";
+  salary: string;
+  skills: string[];
+  matchScore: number;
+  postedDaysAgo: number;
+};
+
+type SalaryBenchmarkResult = {
+  formattedRange: string;
+  minLpa: string;
+  maxLpa: string;
+  insights: string[];
+};
+
+type ResumeAnalysisResult = {
+  candidateName: string;
+  extractedSkills: string[];
+  atsScore: number;
+  recommendedRoles: string[];
+  matchingJobs: { jobId: number; matchPercentage: number }[];
+};
+
+function isResumeAnalysisResult(value: unknown): value is {
+  success: true;
+  candidateName: string;
+  extractedSkills: string[];
+  atsScore: number;
+  recommendedRoles: string[];
+  matchingJobs: { jobId: number; matchPercentage: number }[];
+} {
+  if (typeof value !== "object" || value === null) return false;
+  const result = value as Record<string, unknown>;
+  return (
+    result.success === true &&
+    typeof result.candidateName === "string" &&
+    Array.isArray(result.extractedSkills) &&
+    result.extractedSkills.every((skill) => typeof skill === "string") &&
+    typeof result.atsScore === "number" &&
+    Number.isFinite(result.atsScore) &&
+    Array.isArray(result.recommendedRoles) &&
+    result.recommendedRoles.every((role) => typeof role === "string") &&
+    Array.isArray(result.matchingJobs) &&
+    result.matchingJobs.every(
+      (match) =>
+        typeof match === "object" &&
+        match !== null &&
+        "jobId" in match &&
+        typeof match.jobId === "number" &&
+        "matchPercentage" in match &&
+        typeof match.matchPercentage === "number",
+    )
+  );
+}
+
+function calculateSkillMatch(userSkills: string[], jobSkills: string[]): number {
+  if (jobSkills.length === 0) return 70;
+  const normalizedUserSkills = new Set(
+    userSkills.map((skill) => skill.trim().toLowerCase()),
+  );
+  const matchedCount = jobSkills.filter((skill) =>
+    normalizedUserSkills.has(skill.trim().toLowerCase()),
+  ).length;
+  return Math.round(40 + (matchedCount / jobSkills.length) * 60);
+}
+
+function isApplication(value: unknown): value is Application {
+  if (typeof value !== "object" || value === null) return false;
+  const application = value as Record<string, unknown>;
+  return (
+    (typeof application.id === "string" || typeof application.id === "number") &&
+    typeof application.candidateName === "string" &&
+    typeof application.email === "string" &&
+    typeof application.jobTitle === "string" &&
+    typeof application.matchScore === "string" &&
+    (application.status === "Applied" ||
+      application.status === "Shortlisted" ||
+      application.status === "Rejected") &&
+    typeof application.appliedAt === "string"
+  );
+}
+
+function isSalaryBenchmarkResult(
+  value: unknown,
+): value is SalaryBenchmarkResult & { success: true } {
+  if (typeof value !== "object" || value === null) return false;
+  const result = value as Record<string, unknown>;
+  return (
+    result.success === true &&
+    typeof result.formattedRange === "string" &&
+    typeof result.minLpa === "string" &&
+    typeof result.maxLpa === "string" &&
+    Array.isArray(result.insights) &&
+    result.insights.every((insight) => typeof insight === "string")
+  );
+}
+
+const initialJobs: Job[] = [
+  { id: "1", title: "Frontend Developer", company: "TechNova Solutions", location: "Bhopal, Madhya Pradesh", type: "Full-time", salary: "₹5–8 LPA", skills: ["React", "TypeScript", "CSS"], matchScore: 94, postedDaysAgo: 2 },
+  { id: "2", title: "AI/ML Engineer Intern", company: "DataSphere AI", location: "Bhopal, Madhya Pradesh", type: "Internship", salary: "₹18K–28K / month", skills: ["Python", "Machine Learning", "SQL"], matchScore: 89, postedDaysAgo: 1 },
+  { id: "3", title: "Full Stack Developer", company: "CodeCraft Technologies", location: "Indore, Madhya Pradesh", type: "Full-time", salary: "₹6–10 LPA", skills: ["Next.js", "Node.js", "PostgreSQL"], matchScore: 86, postedDaysAgo: 3 },
+  { id: "4", title: "Backend Developer", company: "Narmada Digital", location: "Jabalpur, Madhya Pradesh", type: "Full-time", salary: "₹5–9 LPA", skills: ["Java", "Spring Boot", "PostgreSQL"], matchScore: 82, postedDaysAgo: 4 },
+  { id: "5", title: "DevOps Engineer", company: "CloudRoute Systems", location: "Bangalore, Karnataka", type: "Full-time", salary: "₹12–20 LPA", skills: ["AWS", "Docker", "Kubernetes"], matchScore: 91, postedDaysAgo: 1 },
+  { id: "6", title: "UI/UX Designer", company: "PixelMint Studio", location: "Pune, Maharashtra", type: "Full-time", salary: "₹7–12 LPA", skills: ["Figma", "Prototyping", "User Research"], matchScore: 84, postedDaysAgo: 5 },
+  { id: "7", title: "Data Analyst", company: "InsightWorks", location: "Hyderabad, Telangana", type: "Full-time", salary: "₹6–10 LPA", skills: ["SQL", "Power BI", "Python"], matchScore: 88, postedDaysAgo: 2 },
+  { id: "8", title: "Android Developer", company: "AppOrbit", location: "Gurgaon, Haryana", type: "Full-time", salary: "₹8–14 LPA", skills: ["Kotlin", "Android", "REST APIs"], matchScore: 79, postedDaysAgo: 6 },
+  { id: "9", title: "QA Automation Engineer", company: "QualityStack", location: "Noida, Uttar Pradesh", type: "Full-time", salary: "₹7–11 LPA", skills: ["Playwright", "TypeScript", "API Testing"], matchScore: 92, postedDaysAgo: 1 },
+  { id: "10", title: "Remote Backend Engineer", company: "OpenBridge Labs", location: "Remote, India", type: "Remote", salary: "₹14–22 LPA", skills: ["Go", "Microservices", "AWS"], matchScore: 87, postedDaysAgo: 3 },
+  { id: "11", title: "React Developer", company: "BrightLoop Technologies", location: "Bangalore, Karnataka", type: "Full-time", salary: "₹8–13 LPA", skills: ["React", "JavaScript", "Redux"], matchScore: 90, postedDaysAgo: 2 },
+  { id: "12", title: "Python Backend Developer", company: "AsterByte", location: "Pune, Maharashtra", type: "Full-time", salary: "₹7–12 LPA", skills: ["Python", "Django", "Redis"], matchScore: 85, postedDaysAgo: 7 },
+  { id: "13", title: "Machine Learning Engineer", company: "NeuralSpring", location: "Hyderabad, Telangana", type: "Full-time", salary: "₹14–24 LPA", skills: ["Python", "PyTorch", "MLOps"], matchScore: 96, postedDaysAgo: 1 },
+  { id: "14", title: "Product Designer (UI/UX)", company: "Northstar Product Co.", location: "Gurgaon, Haryana", type: "Full-time", salary: "₹10–16 LPA", skills: ["Figma", "Design Systems", "Accessibility"], matchScore: 77, postedDaysAgo: 8 },
+  { id: "15", title: "Junior Data Analyst", company: "MetricMind", location: "Indore, Madhya Pradesh", type: "Full-time", salary: "₹4–7 LPA", skills: ["Excel", "SQL", "Tableau"], matchScore: 83, postedDaysAgo: 4 },
+  { id: "16", title: "iOS Developer", company: "BlueKite Mobility", location: "Bangalore, Karnataka", type: "Full-time", salary: "₹10–17 LPA", skills: ["Swift", "SwiftUI", "Core Data"], matchScore: 81, postedDaysAgo: 3 },
+  { id: "17", title: "Full Stack Engineer", company: "CivicTech India", location: "Bhopal, Madhya Pradesh", type: "Full-time", salary: "₹7–11 LPA", skills: ["React", "Node.js", "MongoDB"], matchScore: 93, postedDaysAgo: 1 },
+  { id: "18", title: "Cloud DevOps Associate", company: "InfraPilot", location: "Noida, Uttar Pradesh", type: "Full-time", salary: "₹8–13 LPA", skills: ["Azure", "Terraform", "CI/CD"], matchScore: 74, postedDaysAgo: 9 },
+  { id: "19", title: "Software QA Engineer", company: "Verity Software", location: "Pune, Maharashtra", type: "Full-time", salary: "₹5–9 LPA", skills: ["Selenium", "Java", "Jira"], matchScore: 88, postedDaysAgo: 2 },
+  { id: "20", title: "Frontend Engineering Intern", company: "LaunchPad Digital", location: "Remote, India", type: "Internship", salary: "₹20K–30K / month", skills: ["HTML", "CSS", "React"], matchScore: 68, postedDaysAgo: 5 },
+  { id: "21", title: "Java Backend Engineer", company: "FinAxis Technologies", location: "Hyderabad, Telangana", type: "Full-time", salary: "₹10–16 LPA", skills: ["Java", "Spring Boot", "Kafka"], matchScore: 95, postedDaysAgo: 1 },
+  { id: "22", title: "Data Visualization Analyst", company: "ClearView Analytics", location: "Gurgaon, Haryana", type: "Full-time", salary: "₹7–12 LPA", skills: ["SQL", "Tableau", "Data Modeling"], matchScore: 86, postedDaysAgo: 6 },
+  { id: "23", title: "Flutter Mobile Developer", company: "PocketLabs", location: "Bangalore, Karnataka", type: "Full-time", salary: "₹8–14 LPA", skills: ["Flutter", "Dart", "Firebase"], matchScore: 90, postedDaysAgo: 3 },
+  { id: "24", title: "Platform DevOps Engineer", company: "ScaleGrid Cloud", location: "Remote, India", type: "Remote", salary: "₹16–25 LPA", skills: ["Kubernetes", "Helm", "GCP"], matchScore: 98, postedDaysAgo: 1 },
+  { id: "25", title: "UX Researcher", company: "HumanLayer", location: "Pune, Maharashtra", type: "Full-time", salary: "₹8–13 LPA", skills: ["User Research", "Usability Testing", "Figma"], matchScore: 73, postedDaysAgo: 10 },
+  { id: "26", title: "Node.js API Developer", company: "RelayStack", location: "Noida, Uttar Pradesh", type: "Full-time", salary: "₹7–12 LPA", skills: ["Node.js", "Express", "MongoDB"], matchScore: 84, postedDaysAgo: 4 },
+  { id: "27", title: "Computer Vision Intern", company: "VisionForge AI", location: "Bangalore, Karnataka", type: "Internship", salary: "₹25K–40K / month", skills: ["Python", "OpenCV", "PyTorch"], matchScore: 91, postedDaysAgo: 2 },
+  { id: "28", title: "Part-time Web Developer", company: "LocalWorks Digital", location: "Jabalpur, Madhya Pradesh", type: "Part-time", salary: "₹25K–40K / month", skills: ["WordPress", "JavaScript", "SEO"], matchScore: 70, postedDaysAgo: 7 },
+  { id: "29", title: "Business Data Analyst", company: "PrismPay", location: "Hyderabad, Telangana", type: "Full-time", salary: "₹9–15 LPA", skills: ["SQL", "Python", "Looker"], matchScore: 87, postedDaysAgo: 3 },
+  { id: "30", title: "React Native Developer", company: "UrbanFleet", location: "Gurgaon, Haryana", type: "Full-time", salary: "₹9–15 LPA", skills: ["React Native", "TypeScript", "GraphQL"], matchScore: 80, postedDaysAgo: 5 },
+  { id: "31", title: "Site Reliability Engineer", company: "SignalPeak", location: "Bangalore, Karnataka", type: "Full-time", salary: "₹18–28 LPA", skills: ["Linux", "Prometheus", "AWS"], matchScore: 94, postedDaysAgo: 2 },
+  { id: "32", title: "Accessibility-focused UI Designer", company: "CommonGround Apps", location: "Remote, India", type: "Remote", salary: "₹9–14 LPA", skills: ["Figma", "WCAG", "Design Systems"], matchScore: 78, postedDaysAgo: 8 },
+  { id: "33", title: "Full Stack JavaScript Developer", company: "DevHarbor", location: "Indore, Madhya Pradesh", type: "Full-time", salary: "₹6–10 LPA", skills: ["React", "Node.js", "PostgreSQL"], matchScore: 89, postedDaysAgo: 1 },
+  { id: "34", title: "QA Engineer - API Testing", company: "SecureTrail", location: "Noida, Uttar Pradesh", type: "Full-time", salary: "₹6–10 LPA", skills: ["Postman", "REST APIs", "Automation"], matchScore: 82, postedDaysAgo: 6 },
+  { id: "35", title: "Generative AI Engineer", company: "PromptWorks India", location: "Pune, Maharashtra", type: "Full-time", salary: "₹15–26 LPA", skills: ["Python", "LLMs", "RAG"], matchScore: 97, postedDaysAgo: 1 },
+  { id: "36", title: "Data Analyst Intern", company: "GrowthLedger", location: "Bhopal, Madhya Pradesh", type: "Internship", salary: "₹15K–22K / month", skills: ["Excel", "SQL", "Power BI"], matchScore: 76, postedDaysAgo: 4 },
+  { id: "37", title: "Backend Engineer - Go", company: "PacketBase", location: "Remote, India", type: "Remote", salary: "₹14–23 LPA", skills: ["Go", "PostgreSQL", "gRPC"], matchScore: 90, postedDaysAgo: 2 },
+  { id: "38", title: "Mobile App Developer", company: "CareRoute Health", location: "Hyderabad, Telangana", type: "Full-time", salary: "₹8–13 LPA", skills: ["Kotlin", "Android", "Firebase"], matchScore: 85, postedDaysAgo: 7 },
+  { id: "39", title: "Frontend UI Engineer", company: "CanvasCloud", location: "Pune, Maharashtra", type: "Full-time", salary: "₹9–15 LPA", skills: ["Vue.js", "TypeScript", "CSS"], matchScore: 88, postedDaysAgo: 3 },
+  { id: "40", title: "Machine Learning Research Associate", company: "DeepField Research", location: "Bangalore, Karnataka", type: "Full-time", salary: "₹12–20 LPA", skills: ["Python", "TensorFlow", "Statistics"], matchScore: 93, postedDaysAgo: 5 },
+  { id: "41", title: "Cloud Infrastructure Engineer", company: "MonsoonStack", location: "Gurgaon, Haryana", type: "Full-time", salary: "₹13–21 LPA", skills: ["AWS", "Terraform", "Linux"], matchScore: 86, postedDaysAgo: 2 },
+  { id: "42", title: "Product Data Analyst", company: "LoopCart", location: "Noida, Uttar Pradesh", type: "Full-time", salary: "₹8–14 LPA", skills: ["SQL", "Python", "Experimentation"], matchScore: 92, postedDaysAgo: 1 },
+  { id: "43", title: "Part-time QA Tester", company: "TestBench Studio", location: "Indore, Madhya Pradesh", type: "Part-time", salary: "₹20K–35K / month", skills: ["Manual Testing", "Jira", "Regression Testing"], matchScore: 67, postedDaysAgo: 9 },
+  { id: "44", title: "iOS App Engineer", company: "FinchPay", location: "Pune, Maharashtra", type: "Full-time", salary: "₹12–19 LPA", skills: ["Swift", "UIKit", "REST APIs"], matchScore: 84, postedDaysAgo: 4 },
+  { id: "45", title: "Full Stack Developer Intern", company: "BuildSprint", location: "Hyderabad, Telangana", type: "Internship", salary: "₹20K–32K / month", skills: ["React", "Express", "SQL"], matchScore: 79, postedDaysAgo: 3 },
+  { id: "46", title: "Python Data Engineer", company: "Lakehouse Labs", location: "Remote, India", type: "Remote", salary: "₹13–22 LPA", skills: ["Python", "Spark", "Airflow"], matchScore: 96, postedDaysAgo: 1 },
+  { id: "47", title: "Frontend Developer - Angular", company: "CobaltWorks", location: "Jabalpur, Madhya Pradesh", type: "Full-time", salary: "₹5–9 LPA", skills: ["Angular", "TypeScript", "RxJS"], matchScore: 75, postedDaysAgo: 6 },
+  { id: "48", title: "QA Automation Intern", company: "VerifyNow", location: "Bangalore, Karnataka", type: "Internship", salary: "₹18K–28K / month", skills: ["Cypress", "JavaScript", "Git"], matchScore: 81, postedDaysAgo: 2 },
+  { id: "49", title: "UI/UX Product Designer", company: "PeopleFirst Tech", location: "Bhopal, Madhya Pradesh", type: "Full-time", salary: "₹6–10 LPA", skills: ["Figma", "Interaction Design", "Prototyping"], matchScore: 87, postedDaysAgo: 5 },
+  { id: "50", title: "Full Stack Software Engineer", company: "HorizonWare", location: "Remote, India", type: "Remote", salary: "₹16–26 LPA", skills: ["TypeScript", "Next.js", "AWS"], matchScore: 98, postedDaysAgo: 1 },
+];
+
+type ApiJob = {
+  id: string | number;
+  title: string;
+  company: string;
+  description?: string;
   location: string;
   type: string;
   salary: string;
-  skills: string[];
+  skills?: string[];
+  matchScore?: number;
   match?: number;
+  postedDaysAgo?: number;
   posted?: string;
-  logo?: string;
 };
 
-const initialJobs: Job[] = [
-  {
-    id: 1,
-    company: "TechNova Solutions",
-    logo: "TN",
-    title: "Junior Software Developer",
-    location: "Bhopal, Madhya Pradesh",
-    type: "Full-time",
-    salary: "₹4.5 – 7 LPA",
-    skills: ["JavaScript", "React", "Node.js"],
-    match: 94,
-    posted: "2 days ago",
-  },
-  {
-    id: 2,
-    company: "DataSphere AI",
-    logo: "DS",
-    title: "AI / ML Intern",
-    location: "Bhopal, Madhya Pradesh",
-    type: "Internship",
-    salary: "₹15K – 25K / month",
-    skills: ["Python", "Machine Learning", "SQL"],
-    match: 89,
-    posted: "1 day ago",
-  },
-  {
-    id: 3,
-    company: "CodeCraft Technologies",
-    logo: "CC",
-    title: "Frontend Developer",
-    location: "Indore, Madhya Pradesh",
-    type: "Full-time",
-    salary: "₹5 – 8 LPA",
-    skills: ["React", "Next.js", "TypeScript"],
-    match: 86,
-    posted: "3 days ago",
-  },
-];
+type Application = {
+  id: number | string;
+  jobId?: string;
+  candidateName: string;
+  email: string;
+  jobTitle: string;
+  company?: string;
+  matchScore: string;
+  status: "Applied" | "Shortlisted" | "Rejected";
+  appliedAt: string;
+  extractedSkills?: string[];
+  atsScore?: number;
+  recommendedRoles?: string[];
+  interviewDate?: string;
+  interviewTime?: string;
+  interviewLocationUrl?: string;
+  hrContactNumber?: string;
+  coverLetter?: string;
+  resumeFile?: File;
+  resumeUrl?: string;
+};
+
+function AdminApplicantsTable({
+  candidates,
+  onShortlist,
+  onReject,
+}: {
+  candidates: Application[];
+  onShortlist: (candidate: Application) => void;
+  onReject: (candidate: Application) => void;
+}) {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<
+    "All" | Application["status"]
+  >("All");
+  const [detailsCandidate, setDetailsCandidate] = useState<Application | null>(
+    null,
+  );
+  const [summaryCandidate, setSummaryCandidate] =
+    useState<Application | null>(null);
+
+  const filteredCandidates = candidates.filter((candidate) => {
+    const matchesStatus =
+      statusFilter === "All" || candidate.status === statusFilter;
+    const query = searchTerm.trim().toLowerCase();
+    const matchesSearch =
+      !query ||
+      candidate.candidateName.toLowerCase().includes(query) ||
+      candidate.jobTitle.toLowerCase().includes(query) ||
+      candidate.email.toLowerCase().includes(query);
+    return matchesStatus && matchesSearch;
+  });
+
+  return (
+    <>
+      <div className="space-y-5">
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+          <input
+            type="search"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Search candidates or roles..."
+            className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-xs text-zinc-200 outline-none placeholder:text-zinc-500 focus:border-emerald-500 lg:w-80"
+          />
+          <div className="flex flex-wrap gap-2">
+            {(["All", "Applied", "Shortlisted", "Rejected"] as const).map(
+              (filter) => (
+                <button
+                  type="button"
+                  key={filter}
+                  onClick={() => setStatusFilter(filter)}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
+                    statusFilter === filter
+                      ? "border-emerald-700 bg-emerald-950 text-emerald-300"
+                      : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  {filter}
+                </button>
+              ),
+            )}
+          </div>
+        </div>
+
+        <div className="w-full overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 shadow-xl">
+          <table className="w-full min-w-[1240px] text-left text-sm text-zinc-300">
+            <thead>
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 border-b border-zinc-800">
+                  Candidate Name
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 border-b border-zinc-800">
+                  Applied Job
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 border-b border-zinc-800">
+                  Match Score
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 border-b border-zinc-800">
+                  Status
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 border-b border-zinc-800">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredCandidates.map((candidate) => (
+                <tr
+                  key={candidate.id}
+                  className="transition-colors hover:bg-zinc-800/30"
+                >
+                  <td className="px-4 py-4 text-sm text-zinc-200 border-b border-zinc-800/60">
+                    <div className="text-sm font-semibold text-zinc-100">
+                      {candidate.candidateName}
+                    </div>
+                    <div className="mt-1 text-xs text-zinc-500">
+                      {candidate.email}
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 text-sm text-zinc-200 border-b border-zinc-800/60">
+                    {candidate.jobTitle}
+                  </td>
+                  <td className="px-4 py-4 text-sm text-zinc-200 border-b border-zinc-800/60 font-semibold text-emerald-300">
+                    {candidate.matchScore}
+                  </td>
+                  <td className="px-4 py-4 text-sm text-zinc-200 border-b border-zinc-800/60">
+                    <span
+                      className={`rounded-full border px-2.5 py-1 text-xs ${
+                        candidate.status === "Shortlisted"
+                          ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
+                          : candidate.status === "Rejected"
+                            ? "border-rose-500/20 bg-rose-500/10 text-rose-300"
+                            : "border-zinc-700 bg-zinc-800 text-zinc-300"
+                      }`}
+                    >
+                      {candidate.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4 text-sm text-zinc-200 border-b border-zinc-800/60">
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setDetailsCandidate(candidate)}
+                        className="px-2 py-1 text-xs font-medium text-zinc-400 transition-all hover:text-white"
+                      >
+                        Details
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSummaryCandidate(candidate)}
+                        className="px-2 py-1 text-xs font-medium text-zinc-400 transition-all hover:text-white"
+                      >
+                        View AI Summary
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!candidate.resumeUrl}
+                        onClick={() => {
+                          if (candidate.resumeUrl) {
+                            window.open(candidate.resumeUrl, "_blank");
+                          }
+                        }}
+                        className="px-2 py-1 text-xs font-medium text-zinc-400 transition-all hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        View Resume
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onShortlist(candidate)}
+                        className="px-3 py-1 rounded-md text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/30 transition-all"
+                      >
+                        Shortlist
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onReject(candidate)}
+                        className="px-3 py-1 rounded-md text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/30 transition-all"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filteredCandidates.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="px-4 py-4 text-sm text-zinc-200 border-b border-zinc-800/60 text-center text-zinc-500"
+                  >
+                    No candidates match these filters.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {(detailsCandidate || summaryCandidate) && (
+        <div className="fixed inset-0 z-[1300] grid place-items-center bg-black/80 p-5 backdrop-blur-sm">
+          <section
+            role="dialog"
+            aria-modal="true"
+            className="relative max-h-[85vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-zinc-700 bg-zinc-950 p-6 text-white shadow-2xl"
+          >
+            <button
+              type="button"
+              aria-label="Close candidate details"
+              onClick={() => {
+                setDetailsCandidate(null);
+                setSummaryCandidate(null);
+              }}
+              className="absolute right-4 top-4 rounded-md border border-zinc-700 px-2 py-1 text-zinc-400 hover:text-white"
+            >
+              ✕
+            </button>
+            <span className="text-xs font-semibold uppercase tracking-widest text-emerald-400">
+              {summaryCandidate ? "Recruiter AI Summary" : "Candidate Details"}
+            </span>
+            <h3 className="mt-2 pr-8 text-xl font-bold">
+              {(summaryCandidate ?? detailsCandidate)?.candidateName}
+            </h3>
+            <p className="mt-1 text-sm text-zinc-400">
+              {(summaryCandidate ?? detailsCandidate)?.jobTitle}
+            </p>
+            {summaryCandidate ? (
+              <>
+                {typeof summaryCandidate.atsScore === "number" ? (
+                  <div className="mt-5 rounded-xl border border-emerald-900 bg-emerald-950/40 p-4">
+                    <strong className="text-3xl text-emerald-300">
+                      {summaryCandidate.atsScore}
+                    </strong>
+                    <span className="ml-2 text-sm text-zinc-300">
+                      /100 ATS Resume Score
+                    </span>
+                  </div>
+                ) : (
+                  <p className="mt-5 text-sm text-zinc-500">
+                    No ATS analysis is available for this candidate yet.
+                  </p>
+                )}
+                <div className="mt-5">
+                  <h4 className="mb-2 text-sm font-semibold text-zinc-200">
+                    Parsed Candidate Strengths
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {summaryCandidate.extractedSkills?.length ? (
+                      summaryCandidate.extractedSkills.map((skill) => (
+                        <span
+                          key={skill}
+                          className="rounded-full border border-emerald-900 bg-emerald-950/60 px-3 py-1 text-xs text-emerald-200"
+                        >
+                          {skill}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-xs text-zinc-500">
+                        No parsed skills are available.
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-5">
+                  <h4 className="mb-2 text-sm font-semibold text-zinc-200">
+                    Recommended Roles
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {summaryCandidate.recommendedRoles?.map((role) => (
+                      <span
+                        key={role}
+                        className="rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-300"
+                      >
+                        {role}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="mt-5 grid gap-3 text-sm text-zinc-300">
+                <p>
+                  <strong>Email:</strong> {detailsCandidate?.email}
+                </p>
+                <p>
+                  <strong>Status:</strong> {detailsCandidate?.status}
+                </p>
+                <p>
+                  <strong>Match score:</strong> {detailsCandidate?.matchScore}
+                </p>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+    </>
+  );
+}
+
+type MockInterviewFeedback = {
+  score: number;
+  whatWentWell: string;
+  improvementTip: string;
+};
+
+type MockInterviewTurn = {
+  question: string;
+  candidateAnswer?: string;
+  feedback?: MockInterviewFeedback;
+};
+
+type PolishedInterviewResult = {
+  polishedAnswer: string;
+  vocabularyUsed: string[];
+  tip: string;
+};
+
+const normalizeJobs = (apiJobs: ApiJob[]): Job[] =>
+  apiJobs.map((job) => {
+    const postedDaysAgo = Number(
+      job.postedDaysAgo ?? (job.posted ? Number.parseInt(job.posted, 10) : 0),
+    );
+
+    return {
+      id: String(job.id),
+      title: job.title,
+      company: job.company,
+      description: job.description,
+      location: job.location,
+      type:
+        (["Full-time", "Part-time", "Internship", "Remote"] as const).find(
+          (jobType) => jobType === job.type,
+        ) ?? "Full-time",
+      salary: job.salary,
+      skills: job.skills ?? [],
+      matchScore: Number(job.matchScore ?? job.match ?? 85),
+      postedDaysAgo: Number.isFinite(postedDaysAgo) ? postedDaysAgo : 0,
+    };
+  });
 
 export default function Home() {
   const [search, setSearch] = useState("");
@@ -60,49 +518,344 @@ export default function Home() {
   const [searched, setSearched] = useState(false);
 
   const [jobs, setJobs] = useState<Job[]>(initialJobs);
+  const [showAllJobs, setShowAllJobs] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-const [isAdmin, setIsAdmin] = useState(false);
+const [isAdminView, setIsAdminView] = useState(false);
 const [showAdminModal, setShowAdminModal] = useState(false);
 const [adminPassword, setAdminPassword] = useState("");
-const [applications, setApplications] = useState([
-  {
-    id: 1,
-    candidateName: "Sparsh",
-    email: "sparshshri5182@gmail.com",
-    jobTitle: "Junior Software Developer",
-    matchScore: "100%",
-    status: "Applied",
-    appliedAt: "Today"
-  }
-]);
+const [applications, setApplications] = useState<Application[]>([]);
+const [applicationJob, setApplicationJob] = useState<Job | null>(null);
+const [applicantName, setApplicantName] = useState("");
+const [applicantEmail, setApplicantEmail] = useState("");
+const [applicantResume, setApplicantResume] = useState<File | null>(null);
+const [submittingApplication, setSubmittingApplication] = useState(false);
+const [schedulingApplication, setSchedulingApplication] = useState<Application | null>(null);
+const [interviewDate, setInterviewDate] = useState("");
+const [interviewTime, setInterviewTime] = useState("");
+const [interviewLocationUrl, setInterviewLocationUrl] = useState("");
+const [hrContactNumber, setHrContactNumber] = useState("");
+const [sendingInterviewNotification, setSendingInterviewNotification] = useState(false);
   // Resume Upload & AI Agent States
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [userSkills, setUserSkills] = useState<string[]>([]);
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
- const [appliedJobIds, setAppliedJobIds] = useState<any[]>([]);
+ const [isModalOpen, setIsModalOpen] = useState(false);
+ const [uploading, setUploading] = useState(false);
+ const [userSkills, setUserSkills] = useState<string[]>([]);
+ const [resumeAnalysis, setResumeAnalysis] = useState<ResumeAnalysisResult | null>(null);
+ const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+ const [salaryExperienceYears, setSalaryExperienceYears] = useState(2);
+ const [salaryBenchmark, setSalaryBenchmark] = useState<SalaryBenchmarkResult | null>(null);
+ const [salaryBenchmarkLoading, setSalaryBenchmarkLoading] = useState(false);
+ const [salaryBenchmarkError, setSalaryBenchmarkError] = useState("");
+ const salaryBenchmarkRequest = useRef<AbortController | null>(null);
+ const [appliedJobIds, setAppliedJobIds] = useState<string[]>([]);
  const [statusFilter, setStatusFilter] = useState<string>("All");
  const [searchTerm, setSearchTerm] = useState("");
  const [selectedCandidate, setSelectedCandidate] = useState<any | null>(null);
+ const [selectedSummaryCandidate, setSelectedSummaryCandidate] = useState<Application | null>(null);
+ const [applicationDataLoaded, setApplicationDataLoaded] = useState(false);
+ const [coverLetter, setCoverLetter] = useState<string>('');
+ const [isGeneratingCL, setIsGeneratingCL] = useState<boolean>(false);
+ const [showCLModal, setShowCLModal] = useState<boolean>(false);
+ const [interviewPrepJob, setInterviewPrepJob] = useState<Job | null>(null);
+ const [activePrepTab, setActivePrepTab] = useState<"mock" | "english">("mock");
+ const [mockInterviewTurns, setMockInterviewTurns] = useState<MockInterviewTurn[]>([]);
+ const [mockInterviewAnswer, setMockInterviewAnswer] = useState("");
+ const [mockInterviewLoading, setMockInterviewLoading] = useState(false);
+ const [roughInterviewAnswer, setRoughInterviewAnswer] = useState("");
+ const [polishedInterviewAnswer, setPolishedInterviewAnswer] = useState("");
+  const [interviewVocabulary, setInterviewVocabulary] = useState<string[]>([]);
+  const [interviewProTip, setInterviewProTip] = useState("");
+ const [polishingInterviewAnswer, setPolishingInterviewAnswer] = useState(false);
  useEffect(() => {
-  if (typeof window !== "undefined") {
-    const saved = localStorage.getItem("appliedJobIds");
-    if (saved) {
-      try {
-        setAppliedJobIds(JSON.parse(saved));
-      } catch (e) {
-        console.error(e);
+  try {
+    const savedJobIds = localStorage.getItem("appliedJobIds");
+    const savedApplications = localStorage.getItem("applications");
+    if (savedJobIds) {
+      const parsedJobIds: unknown = JSON.parse(savedJobIds);
+      if (Array.isArray(parsedJobIds)) {
+        setAppliedJobIds(parsedJobIds.map(String));
       }
     }
+    if (savedApplications) {
+      const parsedApplications: unknown = JSON.parse(savedApplications);
+      if (Array.isArray(parsedApplications)) {
+        setApplications(parsedApplications as Application[]);
+      }
+    }
+  } catch (err) {
+    console.error("Failed to load saved applications:", err);
+  } finally {
+    setApplicationDataLoaded(true);
   }
 }, []);
 
 useEffect(() => {
-  if (typeof window !== "undefined") {
+  if (!applicationDataLoaded) return;
+  try {
     localStorage.setItem("appliedJobIds", JSON.stringify(appliedJobIds));
+    localStorage.setItem(
+      "applications",
+      JSON.stringify(applications, (key, value) =>
+        key === "resumeFile" ? undefined : value,
+      ),
+    );
+  } catch (err) {
+    console.error("Failed to save applications locally:", err);
   }
-}, [appliedJobIds]);
+}, [applicationDataLoaded, appliedJobIds, applications]);
+
+useEffect(() => {
+  const loadAdminCandidates = async () => {
+    try {
+      const apiBaseUrl = (
+        process.env.NEXT_PUBLIC_API_BASE_URL ||
+        process.env.NEXT_PUBLIC_API_URL ||
+        "http://localhost:5000"
+      ).replace(/\/+$/, "");
+      const response = await fetch(`${apiBaseUrl}/api/admin/candidates`);
+      const result: unknown = await response.json();
+      if (
+        !response.ok ||
+        typeof result !== "object" ||
+        result === null ||
+        !("success" in result) ||
+        result.success !== true ||
+        !("candidates" in result) ||
+        !Array.isArray(result.candidates)
+      ) {
+        throw new Error("Could not load candidates from the recruiter service.");
+      }
+
+      const candidates = result.candidates.filter(isApplication);
+      setApplications((currentApplications) => {
+        const knownIds = new Set(currentApplications.map((application) => String(application.id)));
+        return [
+          ...candidates.filter((candidate) => !knownIds.has(String(candidate.id))),
+          ...currentApplications,
+        ];
+      });
+    } catch (error) {
+      console.error("Failed to fetch recruiter candidates:", error);
+    }
+  };
+
+  void loadAdminCandidates();
+}, []);
+
+const fetchSalaryBenchmark = async (job: Job, experienceYears: number) => {
+  salaryBenchmarkRequest.current?.abort();
+  const controller = new AbortController();
+  salaryBenchmarkRequest.current = controller;
+  setSalaryBenchmark(null);
+  setSalaryBenchmarkError("");
+  setSalaryBenchmarkLoading(true);
+
+  try {
+    const apiBaseUrl = (
+      process.env.NEXT_PUBLIC_API_BASE_URL ||
+      process.env.NEXT_PUBLIC_API_URL ||
+      "http://localhost:5000"
+    ).replace(/\/+$/, "");
+    const response = await fetch(`${apiBaseUrl}/api/ai-salary-benchmark`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      body: JSON.stringify({
+        jobTitle: job.title,
+        experienceYears,
+        location: job.location,
+        skills: job.skills,
+      }),
+    });
+    const result: unknown = await response.json();
+
+    if (!response.ok || !isSalaryBenchmarkResult(result)) {
+      const message =
+        typeof result === "object" &&
+        result !== null &&
+        "message" in result &&
+        typeof result.message === "string"
+          ? result.message
+          : "The salary estimate response was invalid. Please try again.";
+      throw new Error(message);
+    }
+
+    setSalaryBenchmark({
+      formattedRange: result.formattedRange,
+      minLpa: result.minLpa,
+      maxLpa: result.maxLpa,
+      insights: result.insights,
+    });
+  } catch (requestError) {
+    if (controller.signal.aborted) return;
+    console.error("Failed to fetch salary benchmark:", requestError);
+    setSalaryBenchmarkError(
+      requestError instanceof Error
+        ? requestError.message
+        : "Unable to load salary insights. Please try again.",
+    );
+  } finally {
+    if (!controller.signal.aborted) {
+      setSalaryBenchmarkLoading(false);
+    }
+  }
+};
+
+const handleViewJobDetails = (job: Job) => {
+  setSelectedJob(job);
+  void fetchSalaryBenchmark(job, salaryExperienceYears);
+};
+
+const handleCloseJobDetails = () => {
+  salaryBenchmarkRequest.current?.abort();
+  salaryBenchmarkRequest.current = null;
+  setSelectedJob(null);
+  setSalaryBenchmark(null);
+  setSalaryBenchmarkError("");
+};
+
+const handleGenerateCoverLetter = async (jobTitle: string, company: string) => {
+    setShowCLModal(true);
+    setIsGeneratingCL(true);
+    try {
+    const apiBaseUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000").replace(/\/+$/, "");
+    const res = await fetch(`${apiBaseUrl}/api/generate-cover-letter`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobTitle, company }),
+      });
+      const data = await res.json();
+      setCoverLetter(data.coverLetter || 'Failed to generate cover letter.');
+    } catch (err) {
+      console.error(err);
+      setCoverLetter('Error connecting to AI service.');
+    } finally {
+      setIsGeneratingCL(false);
+    }
+  };
+
+  const handleCopyCoverLetter = () => {
+    navigator.clipboard.writeText(coverLetter);
+    toast.success('Cover Letter copied to clipboard!');
+  };
+
+  const handlePrepareWithAI = (job: Job) => {
+    setInterviewPrepJob(job);
+    setActivePrepTab("mock");
+    setRoughInterviewAnswer("");
+    setPolishedInterviewAnswer("");
+    setInterviewVocabulary([]);
+    setInterviewProTip("");
+    setMockInterviewTurns([
+      {
+        question: `Tell me how you manage state and handle API errors in production for ${job.title}?`,
+      },
+    ]);
+    setMockInterviewAnswer("");
+    setMockInterviewLoading(false);
+  };
+
+  const handlePolishInterviewAnswer = async () => {
+    if (!interviewPrepJob || !roughInterviewAnswer.trim() || polishingInterviewAnswer) {
+      return;
+    }
+
+    setPolishingInterviewAnswer(true);
+    setPolishedInterviewAnswer("");
+    setInterviewVocabulary([]);
+    setInterviewProTip("");
+    try {
+      const apiBaseUrl = (
+        process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5000"
+      ).replace(/\/+$/, "");
+      const response = await fetch(`${apiBaseUrl}/api/ai-polish-answer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roughAnswer: roughInterviewAnswer.trim(),
+          jobTitle: interviewPrepJob.title,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Could not polish your answer.");
+      }
+      setPolishedInterviewAnswer(data.polishedAnswer || "");
+      setInterviewVocabulary(data.vocabularyUsed || []);
+      setInterviewProTip(data.tip || "");
+    } catch (error) {
+      console.error("Failed to polish interview answer:", error);
+      toast.error(error instanceof Error ? error.message : "Unable to polish your answer.");
+    } finally {
+      setPolishingInterviewAnswer(false);
+    }
+  };
+
+  const handleCopyPolishedAnswer = async () => {
+    try {
+      await navigator.clipboard.writeText(polishedInterviewAnswer);
+      toast.success("Professional answer copied.");
+    } catch (error) {
+      console.error("Failed to copy polished answer:", error);
+      toast.error("Could not copy the answer to the clipboard.");
+    }
+  };
+
+  const handleSubmitMockInterviewAnswer = async () => {
+    const candidateAnswer = mockInterviewAnswer.trim();
+    const currentTurn = mockInterviewTurns[mockInterviewTurns.length - 1];
+    if (!interviewPrepJob || !currentTurn || !candidateAnswer || mockInterviewLoading) {
+      return;
+    }
+
+    setMockInterviewLoading(true);
+    try {
+      const apiBaseUrl = (
+        process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5000"
+      ).replace(/\/+$/, "");
+      const response = await fetch(`${apiBaseUrl}/api/ai-interview-feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jobTitle: interviewPrepJob.title,
+          question: currentTurn.question,
+          candidateAnswer,
+          questionNumber:
+            mockInterviewTurns.filter((turn) => turn.candidateAnswer).length + 1,
+        }),
+      });
+      const data = await response.json();
+      if (
+        !response.ok ||
+        !data.success ||
+        typeof data.feedback?.score !== "number" ||
+        typeof data.nextQuestion !== "string"
+      ) {
+        throw new Error(data.message || "Could not evaluate your answer.");
+      }
+
+      setMockInterviewTurns((currentTurns) => [
+        ...currentTurns.slice(0, -1),
+        {
+          ...currentTurn,
+          candidateAnswer,
+          feedback: data.feedback,
+        },
+        { question: data.nextQuestion },
+      ]);
+      setMockInterviewAnswer("");
+    } catch (error) {
+      console.error("Failed to evaluate mock interview answer:", error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Unable to evaluate your answer. Please try again.",
+      );
+    } finally {
+      setMockInterviewLoading(false);
+    }
+  };
+
   const [activeTab, setActiveTab] = useState<"all" | "applied">("all");
   useEffect(() => {
   const fetchAppliedJobs = async () => {
@@ -110,7 +863,8 @@ useEffect(() => {
       const res = await fetch("http://localhost:5000/api/applications");
       const data = await res.json();
       if (data.success && data.appliedJobIds) {
-        setAppliedJobIds(data.appliedJobIds);
+          const backendJobIds = data.appliedJobIds.map(String);
+          setAppliedJobIds((prev) => [...new Set([...prev, ...backendJobIds])]);
       }
     } catch (err) {
       console.error("Failed to load applied jobs:", err);
@@ -119,43 +873,196 @@ useEffect(() => {
 
   fetchAppliedJobs();
 }, []);
-  const handleApplyJob = async (jobId: number) => {
-  if (appliedJobIds.includes(jobId)) return;
+  const closeApplicationModal = () => {
+    if (submittingApplication) return;
+    setApplicationJob(null);
+    setApplicantResume(null);
+  };
 
-  try {
-    const res = await fetch(`http://localhost:5000/api/jobs/${jobId}/apply`, {
-      method: "POST",
-    });
-    const data = await res.json();
-
-    if (data.success) {
-      setAppliedJobIds((prev) => [...prev, jobId]);
+  const submitJobApplication = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!applicationJob || !applicantResume || submittingApplication) return;
+    if (appliedJobIds.includes(applicationJob.id)) {
+      toast.error("You have already applied for this job.");
+      return;
     }
-  } catch (err) {
-    console.error("Error applying for job:", err);
-    setAppliedJobIds((prev) => [...prev, jobId]);
+
+    setSubmittingApplication(true);
+    const formData = new FormData();
+    formData.append("jobId", applicationJob.id);
+    formData.append("jobTitle", applicationJob.title);
+    formData.append("company", applicationJob.company);
+    formData.append("candidateName", applicantName.trim());
+    formData.append("email", applicantEmail.trim());
+    formData.append("coverLetter", coverLetter);
+    formData.append("resume", applicantResume);
+
+    try {
+      const apiBaseUrl = (
+        process.env.NEXT_PUBLIC_API_BASE_URL ||
+        process.env.NEXT_PUBLIC_API_URL ||
+        "http://localhost:5000"
+      ).replace(/\/+$/, "");
+      const response = await fetch(`${apiBaseUrl}/api/apply-job`, {
+        method: "POST",
+        body: formData,
+      });
+      const result: unknown = await response.json();
+      if (
+        !response.ok ||
+        typeof result !== "object" ||
+        result === null ||
+        !("success" in result) ||
+        result.success !== true ||
+        !("candidate" in result) ||
+        !isApplication(result.candidate) ||
+        !result.candidate.resumeUrl
+      ) {
+        const message =
+          typeof result === "object" &&
+          result !== null &&
+          "message" in result &&
+          typeof result.message === "string"
+            ? result.message
+            : "Your application could not be submitted. Please try again.";
+        throw new Error(message);
+      }
+
+      const candidate = result.candidate;
+      setApplications((current) => [
+        candidate,
+        ...current.filter((application) => application.id !== candidate.id),
+      ]);
+      setAppliedJobIds((current) =>
+        current.includes(applicationJob.id)
+          ? current
+          : [...current, applicationJob.id],
+      );
+      setApplicationJob(null);
+      setApplicantResume(null);
+      setSelectedJob(null);
+      toast.success(`Application submitted for ${applicationJob.title}.`);
+    } catch (error) {
+      console.error("Failed to submit job application:", error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Your application could not be submitted. Please try again.",
+      );
+    } finally {
+      setSubmittingApplication(false);
+    }
+  };
+const openInterviewScheduler = (application: Application) => {
+  setInterviewDate(application.interviewDate ?? "");
+  setInterviewTime(application.interviewTime ?? "");
+  setInterviewLocationUrl(application.interviewLocationUrl ?? "");
+  setHrContactNumber(application.hrContactNumber ?? "");
+  setSchedulingApplication(application);
+};
+const saveInterviewSchedule = async (event: FormEvent<HTMLFormElement>) => {
+  event.preventDefault();
+  if (!schedulingApplication) return;
+
+  let locationUrl: URL;
+  try {
+    locationUrl = new URL(interviewLocationUrl);
+  } catch {
+    toast.error("Enter a valid meeting or venue URL.");
+    return;
+  }
+  if (
+    locationUrl.protocol !== "https:" &&
+    locationUrl.protocol !== "http:"
+  ) {
+    toast.error("Meeting or venue URL must use HTTP or HTTPS.");
+    return;
+  }
+
+  const notificationToastId = "interview-notification";
+  setSendingInterviewNotification(true);
+  toast.loading("Sending interview notification...", {
+    id: notificationToastId,
+  });
+  try {
+    const apiBaseUrl = (
+      process.env.NEXT_PUBLIC_API_BASE_URL ||
+      process.env.NEXT_PUBLIC_API_URL ||
+      "http://localhost:5000"
+    ).replace(/\/+$/, "");
+    const notificationResponse = await fetch(
+      `${apiBaseUrl}/api/send-interview-email`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          candidateEmail: schedulingApplication.email,
+          candidateName: schedulingApplication.candidateName,
+          jobTitle: schedulingApplication.jobTitle,
+          interviewDate,
+          interviewTime,
+          locationUrl: locationUrl.toString(),
+          hrContactNumber: hrContactNumber.trim(),
+        }),
+      },
+    );
+    const notificationResult = await notificationResponse.json();
+    if (!notificationResponse.ok || !notificationResult.success) {
+      throw new Error(
+        notificationResult.message || "Interview notification failed.",
+      );
+    }
+
+    setApplications((prev) =>
+      prev.map((application) =>
+        application.id === schedulingApplication.id
+          ? {
+              ...application,
+              status: "Shortlisted",
+              interviewDate,
+              interviewTime,
+              interviewLocationUrl: locationUrl.toString(),
+              hrContactNumber: hrContactNumber.trim(),
+            }
+          : application,
+      ),
+    );
+    setSchedulingApplication(null);
+    toast.success("Candidate shortlisted and notification sent.", {
+      id: notificationToastId,
+    });
+  } catch (error) {
+    console.error("Failed to notify candidate of interview:", error);
+    toast.error(
+      error instanceof Error
+        ? error.message
+        : "Unable to notify the candidate. Please try again.",
+      { id: notificationToastId },
+    );
+  } finally {
+    setSendingInterviewNotification(false);
   }
 };
 const filteredJobs = jobs.filter((job: any) => {
   const matchesTab =
     activeTab === "all" ? true : appliedJobIds.includes(job.id);
 
-  const query = search ? search.toLowerCase() : "";
-  const matchesSearch =
-    job.title?.toLowerCase().includes(query) ||
-    job.company?.toLowerCase().includes(query) ||
-    job.skills?.some((skill: string) => skill.toLowerCase().includes(query));
+  const roleQuery = search ? search.toLowerCase().trim() : "";
+  const locQuery = location ? location.toLowerCase().trim() : "";
 
-  return matchesTab && matchesSearch;
+  const matchesRole = !roleQuery ||
+    job.title?.toLowerCase().includes(roleQuery) ||
+    job.company?.toLowerCase().includes(roleQuery) ||
+    (job.skills && job.skills.some((s: string) => s.toLowerCase().includes(roleQuery)));
+
+  const jobLocation = job.location ? job.location.toLowerCase() : "";
+  const matchesLoc = !locQuery || jobLocation.includes(locQuery);
+
+  return matchesTab && matchesRole && matchesLoc;
 });
+const displayedJobs = showAllJobs ? filteredJobs : filteredJobs.slice(0, 6);
 const getMatchScore = (jobSkills: string[]) => {
-  if (!userSkills || userSkills.length === 0 || !jobSkills || jobSkills.length === 0) {
-    return 0;
-  }
-  const matched = jobSkills.filter((skill) =>
-    userSkills.some((uSkill) => uSkill.toLowerCase() === skill.toLowerCase())
-  );
-  return Math.round((matched.length / jobSkills.length) * 100);
+  return calculateSkillMatch(userSkills, jobSkills);
 };
 const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
   const file = e.target.files?.[0];
@@ -166,44 +1073,91 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
   formData.append("resume", file);
 
   try {
-    const res = await fetch("http://localhost:5000/api/resume/analyze", {
-      method: "POST",
-      body: formData,
-    });
+   const apiBaseUrl = (
+     process.env.NEXT_PUBLIC_API_BASE_URL ||
+     process.env.NEXT_PUBLIC_API_URL ||
+     "http://localhost:5000"
+   ).replace(/\/+$/, "");
+   const res = await fetch(`${apiBaseUrl}/api/upload-resume`, {
+     method: "POST",
+     body: formData,
+   });
 
-    const data = await res.json();
+   const result: unknown = await res.json();
+   if (!res.ok || !isResumeAnalysisResult(result)) {
+     const message =
+       typeof result === "object" &&
+       result !== null &&
+       "message" in result &&
+       typeof result.message === "string"
+         ? result.message
+         : "Resume analysis failed. Please try again.";
+     throw new Error(message);
+   }
 
-    if (res.ok) {
-      if (data.jobs) setJobs(data.jobs);
-      if (data.userSkills) setUserSkills(data.userSkills);
+   const { candidateName, extractedSkills, atsScore, recommendedRoles, matchingJobs } =
+     result;
+   const matchingJobScores = new Map(
+     matchingJobs.map(({ jobId, matchPercentage }) => [
+       String(jobId),
+       matchPercentage,
+     ]),
+   );
+   setUserSkills(extractedSkills);
+   setJobs((currentJobs) =>
+     currentJobs.map((job) => {
+       const matchedScore = matchingJobScores.get(job.id);
+       return {
+         ...job,
+         matchScore:
+           matchedScore ??
+           calculateSkillMatch(extractedSkills, job.skills),
+       };
+     }),
+   );
 
-      // Extract details from backend response or fallback to file name
-      const candidateName = data.name || file.name.replace(/\.[^/.]+$/, "");
-      const email = data.email || "applicant@jobsphere.ai";
-      const matchScore = data.matchScore ? `${data.matchScore}%` : "85%";
+   const newApplication: Application = {
+     id: `resume-${Date.now()}`,
+     candidateName,
+     email: "applicant@jobsphere.ai",
+     jobTitle: recommendedRoles[0] ?? "Software Engineer Applicant",
+     matchScore: `${Math.max(
+       ...matchingJobs.map((match) => match.matchPercentage),
+       0,
+     )}%`,
+     status: "Applied",
+     appliedAt: new Date().toLocaleDateString(),
+     coverLetter,
+     extractedSkills,
+     atsScore,
+     recommendedRoles,
+     resumeFile:
+       file.type === "application/pdf" ||
+       file.name.toLowerCase().endsWith(".pdf")
+         ? file
+         : undefined,
+   };
 
-      const newApplication = {
-        id: Date.now().toString(),
-        candidateName,
-        email,
-        jobTitle: "Software Engineer Applicant",
-        matchScore,
-        status: "Applied",
-      };
-
-      // Real-time update in Admin portal
-      setApplications((prev) => [newApplication, ...prev]);
-      setIsModalOpen(false);
-      alert("✓ Resume analyzed & added to Recruiter Admin Dashboard!");
-    } else {
-      alert("Failed to analyze resume.");
-    }
-  } catch (err) {
-    console.error("Resume upload error:", err);
-    alert("Failed to analyze resume.");
-  } finally {
-    setUploading(false);
-  }
+   setApplications((current) => [newApplication, ...current]);
+   setResumeAnalysis({
+     candidateName,
+     extractedSkills,
+     atsScore,
+     recommendedRoles,
+     matchingJobs,
+   });
+   setIsModalOpen(false);
+   toast.success("Resume analyzed successfully.");
+ } catch (uploadError) {
+   console.error("Resume upload error:", uploadError);
+   toast.error(
+     uploadError instanceof Error
+       ? uploadError.message
+       : "Resume analysis failed. Please try again.",
+   );
+ } finally {
+   setUploading(false);
+ }
 };
   // Search Jobs API Handler
   const handleSearch = async () => {
@@ -213,12 +1167,15 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
 
       const params = new URLSearchParams();
 
-      if (search.trim()) {
-        params.append("search", search.trim());
+      const normalizedSearch = search.trim().toLowerCase();
+      const normalizedLocation = location.trim().toLowerCase();
+
+      if (normalizedSearch) {
+        params.append("search", normalizedSearch);
       }
 
-      if (location.trim()) {
-        params.append("location", location.trim());
+      if (normalizedLocation) {
+        params.append("location", normalizedLocation);
       }
 
       const response = await fetch(
@@ -232,19 +1189,7 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const data = await response.json();
 
       if (data.success) {
-        const formattedJobs: Job[] = data.jobs.map((job: any) => ({
-          ...job,
-          logo:
-            job.logo ||
-            job.company
-              .split(" ")
-              .map((word: string) => word[0])
-              .join("")
-              .slice(0, 2)
-              .toUpperCase(),
-          match: job.matchScore ?? job.match ?? 85,
-          posted: job.posted ?? "Recently posted",
-        }));
+        const formattedJobs = normalizeJobs(data.jobs);
 
         setJobs(formattedJobs);
         setSearched(true);
@@ -270,7 +1215,154 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setJobs(initialJobs);
   };
 
+  const candidates = applications;
+  if (isAdminView) {
+    return (
+      <main className="min-h-screen bg-zinc-950 text-white">
+        <div className="mx-auto max-w-7xl space-y-6 p-8">
+          <header className="flex items-center justify-between border-b border-zinc-800 pb-5">
+            <h1 className="text-xl font-bold text-emerald-400">
+              JobSphere AI — Recruiter Portal
+            </h1>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setIsAdminView(false)}
+                className="rounded-lg bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-500"
+              >
+                Exit Admin View
+              </button>
+            </div>
+          </header>
 
+          <div className="space-y-7">
+            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+              <div>
+                <h2 className="text-2xl font-bold tracking-tight">
+                  Recruiter Admin Dashboard
+                </h2>
+                <p className="mt-1 text-xs text-zinc-400">
+                  Manage candidates, analyze ATS scores, and review resumes.
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <div className="min-w-40 rounded-xl border border-zinc-800 border-t-emerald-500/40 bg-zinc-900/80 p-4 shadow-lg">
+                  <span className="text-xs text-zinc-400">
+                    Total Applicants
+                  </span>
+                  <p className="mt-1 text-2xl font-bold text-emerald-400">
+                    {candidates.length}
+                  </p>
+                </div>
+                <div className="min-w-40 rounded-xl border border-zinc-800 border-t-emerald-500/40 bg-zinc-900/80 p-4 shadow-lg">
+                  <span className="text-xs text-zinc-400">Shortlisted</span>
+                  <p className="mt-1 text-2xl font-bold text-emerald-400">
+                    {candidates.filter(
+                      (candidate) => candidate.status === "Shortlisted",
+                    ).length}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <AdminApplicantsTable
+              candidates={candidates}
+              onShortlist={openInterviewScheduler}
+              onReject={(candidate) =>
+                setApplications((current) =>
+                  current.map((application) =>
+                    application.id === candidate.id
+                      ? { ...application, status: "Rejected" }
+                      : application,
+                  ),
+                )
+              }
+            />
+          </div>
+        </div>
+
+        {schedulingApplication && (
+          <div className="fixed inset-0 z-[1200] grid place-items-center bg-black/80 p-5 backdrop-blur-sm">
+            <form
+              onSubmit={saveInterviewSchedule}
+              className="grid w-full max-w-[460px] gap-4 rounded-xl border border-zinc-700 bg-zinc-900 p-6 text-white"
+            >
+              <div>
+                <h3 className="font-bold text-emerald-400">
+                  Schedule interview
+                </h3>
+                <p className="mt-1 text-sm text-zinc-400">
+                  {schedulingApplication.candidateName} ·{" "}
+                  {schedulingApplication.jobTitle}
+                </p>
+              </div>
+              <label className="grid gap-1.5 text-sm">
+                Interview date
+                <input
+                  type="date"
+                  value={interviewDate}
+                  onChange={(event) => setInterviewDate(event.target.value)}
+                  required
+                  className="rounded-md border border-zinc-700 bg-zinc-950 p-2.5"
+                />
+              </label>
+              <label className="grid gap-1.5 text-sm">
+                Interview time
+                <input
+                  type="time"
+                  value={interviewTime}
+                  onChange={(event) => setInterviewTime(event.target.value)}
+                  required
+                  className="rounded-md border border-zinc-700 bg-zinc-950 p-2.5"
+                />
+              </label>
+              <label className="grid gap-1.5 text-sm">
+                Meeting / Venue URL
+                <input
+                  type="url"
+                  value={interviewLocationUrl}
+                  onChange={(event) =>
+                    setInterviewLocationUrl(event.target.value)
+                  }
+                  required
+                  className="rounded-md border border-zinc-700 bg-zinc-950 p-2.5"
+                />
+              </label>
+              <label className="grid gap-1.5 text-sm">
+                HR contact number
+                <input
+                  type="tel"
+                  value={hrContactNumber}
+                  onChange={(event) => setHrContactNumber(event.target.value)}
+                  required
+                  className="rounded-md border border-zinc-700 bg-zinc-950 p-2.5"
+                />
+              </label>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={sendingInterviewNotification}
+                  onClick={() => setSchedulingApplication(null)}
+                  className="rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={sendingInterviewNotification}
+                  className="rounded-md bg-emerald-500 px-3 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-50"
+                >
+                  {sendingInterviewNotification
+                    ? "Sending..."
+                    : "Save & Shortlist"}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+      </main>
+    );
+  }
 
   return (
     <main>
@@ -291,51 +1383,30 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
             <a href="#how">How It Works</a>
             <a href="#about">About</a>
           </div>
-<a 
-  href="/pricing" 
-  style={{ 
-    color: "#000", 
-    textDecoration: "none", 
-    fontWeight: "bold",
-    background: "#22c55e", // Website ke green theme se match karta hua
-    padding: "6px 14px",
-    borderRadius: "6px",
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "6px",
-    fontSize: "14px",
-    boxShadow: "0 0 10px rgba(34, 197, 94, 0.3)"
-  }}
->
-  ✨ Pro Plans
-</a>
-          <div className="nav-actions">
-            <button className="login-btn" onClick={() => setIsModalOpen(true)}>
-              Upload Resume
+          <div className="flex items-center gap-3">
+            <a
+              href="/pricing"
+              className="inline-flex items-center gap-1.5 rounded-md bg-green-500 px-3.5 py-1.5 text-sm font-bold text-black shadow-[0_0_10px_rgba(34,197,94,0.3)]"
+            >
+              ✨ Pro Plans
+            </a>
+            <div className="nav-actions">
+              <button
+                className="login-btn"
+                onClick={() => setIsModalOpen(true)}
+              >
+                Upload Resume
+              </button>
+              <button className="signup-btn">Get Started</button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAdminModal(true)}
+              className="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-zinc-700"
+            >
+              🔒 Admin Access
             </button>
-            <button className="signup-btn">Get Started</button>
           </div>
-          <button 
-  onClick={() => {
-    if (isAdmin) {
-      setIsAdmin(false);
-    } else {
-      setShowAdminModal(true);
-    }
-  }}
-  style={{
-    padding: "8px 16px",
-    borderRadius: "8px",
-    backgroundColor: isAdmin ? "#e11d48" : "#27272a",
-    color: "#fff",
-    border: "1px solid #3f3f46",
-    cursor: "pointer",
-    fontWeight: "bold",
-    fontSize: "14px"
-  }}
->
-  {isAdmin ? "Exit Admin View" : "🔒 Admin Access"}
-</button>
         </div>
       </nav>
 
@@ -535,8 +1606,11 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     Applied Jobs ({appliedJobIds.length})
   </button>
 </div>
-            <button className="view-all">
-              View all jobs <ArrowIcon />
+            <button
+              className="view-all"
+              onClick={() => setShowAllJobs((showingAll) => !showingAll)}
+            >
+              {showAllJobs ? "Show less" : "View all jobs"} <ArrowIcon />
             </button>
           </div>
 
@@ -562,25 +1636,38 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
           )}
 
           {/* NO RESULTS */}
-          {searched && !loading && jobs.length === 0 && !error && (
-            <div className="no-results">
-              <div className="no-results-icon">
-                <SearchIcon />
-              </div>
-              <h3>No matching jobs found</h3>
-              <p>Try another job title, skill, company, or location.</p>
-              <button onClick={clearSearch}>Show all jobs</button>
+          {!loading && !error && filteredJobs.length === 0 && (
+            <div className="flex flex-col items-center justify-center p-12 my-6 bg-zinc-900/50 border border-zinc-800 rounded-2xl text-center">
+              <p className="text-xl font-semibold text-zinc-200">
+                No matching jobs found
+              </p>
+              <p className="text-sm text-zinc-400 mt-1">
+                Try adjusting your search terms or location filter.
+              </p>
+              <button
+                onClick={() => {
+                  setSearch("");
+                  setLocation("");
+                  setSearched(false);
+                  setError("");
+                  setJobs(initialJobs);
+                  setShowAllJobs(false);
+                }}
+                className="mt-4 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm rounded-lg transition"
+              >
+                Clear Filters
+              </button>
             </div>
           )}
 
           {/* JOB GRID */}
        {filteredJobs.length > 0 && (
             <div className="job-grid">
-             {filteredJobs.map((job) => (
+             {displayedJobs.map((job) => (
                 <article className="job-card" key={job.id}>
                   <div className="job-card-top">
       {(() => {
-  const app = applications.find((a) => a.jobTitle === job.title);
+  const app = applications.find((application) => application.jobId === job.id);
   const status = app ? app.status : (appliedJobIds.includes(job.id) ? "Applied" : null);
 
   if (!status) return null;
@@ -622,13 +1709,12 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
   );
 })()}
                     <div className="company-logo">
-                      {job.logo ||
-                        job.company
-                          .split(" ")
-                          .map((word) => word[0])
-                          .join("")
-                          .slice(0, 2)
-                          .toUpperCase()}
+                      {job.company
+                        .split(" ")
+                        .map((word) => word[0])
+                        .join("")
+                        .slice(0, 2)
+                        .toUpperCase()}
                     </div>
 
                     <button
@@ -663,22 +1749,78 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                   <div className="job-footer">
                     <div className="match">
                       <div className="match-ring">
-                     <span>{userSkills.length > 0 ? getMatchScore(job.skills || []) : (job.match ?? 85)}%</span>
+                     <span>{userSkills.length > 0 ? getMatchScore(job.skills || []) : job.matchScore}%</span>
                       </div>
 
                       <div>
                         <strong>AI Match</strong>
-                        <small>{job.posted ?? "Recently posted"}</small>
+                        <small>{job.postedDaysAgo === 0 ? "Posted today" : `${job.postedDaysAgo} days ago`}</small>
                       </div>
                     </div>
 
                     <button
                       className="details-btn"
-                      onClick={() => setSelectedJob(job)}
+                      onClick={() => handleViewJobDetails(job)}
                     >
                       View Job <ArrowIcon />
                     </button>
                   </div>
+                  <button
+                    className="prepare-interview-button"
+                    onClick={() => handlePrepareWithAI(job)}
+                  >
+                    ✨ Prepare with AI
+                  </button>
+                  {activeTab === "applied" &&
+                    (() => {
+                      const application = applications.find(
+                        (candidateApplication) =>
+                          candidateApplication.jobId === job.id,
+                      );
+                      if (
+                        application?.status !== "Shortlisted" ||
+                        !application.interviewDate ||
+                        !application.interviewTime ||
+                        !application.interviewLocationUrl ||
+                        !application.hrContactNumber
+                      ) {
+                        return null;
+                      }
+
+                      const formattedInterviewDate = new Date(
+                        `${application.interviewDate}T00:00:00`,
+                      ).toLocaleDateString(undefined, {
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      });
+
+                      return (
+                        <section className="interview-details" aria-label="Interview confirmed">
+                          <h4>Interview Confirmed</h4>
+                          <p><strong>Date:</strong> {formattedInterviewDate}</p>
+                          <p><strong>Time:</strong> {application.interviewTime}</p>
+                          <p>
+                            <strong>HR Contact:</strong>{" "}
+                            <a href={`tel:${application.hrContactNumber}`}>{application.hrContactNumber}</a>
+                          </p>
+                          <a
+                            className="help-center-button"
+                            href={application.interviewLocationUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            Join Interview / View Location
+                          </a>
+                          <a
+                            className="help-center-button"
+                            href={`mailto:support@jobsphere.ai?subject=${encodeURIComponent(`Interview help: ${job.title}`)}`}
+                          >
+                            Contact Help Center
+                          </a>
+                        </section>
+                      );
+                    })()}
                 </article>
               ))}
             </div>
@@ -823,6 +1965,106 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         </div>
       </footer>
 
+      {applicationJob && (
+        <div className="application-modal-overlay">
+          <form
+            className="application-modal"
+            onSubmit={submitJobApplication}
+            aria-labelledby="application-modal-title"
+          >
+            <button
+              type="button"
+              className="application-modal-close"
+              aria-label="Close application form"
+              onClick={closeApplicationModal}
+              disabled={submittingApplication}
+            >
+              ✕
+            </button>
+            <span className="eyebrow">JOB APPLICATION</span>
+            <h2 id="application-modal-title">Apply for {applicationJob.title}</h2>
+            <p className="application-modal-subtitle">
+              {applicationJob.company} · {applicationJob.location}
+            </p>
+
+            <label className="application-field">
+              Full name
+              <input
+                type="text"
+                value={applicantName}
+                onChange={(event) => setApplicantName(event.target.value)}
+                autoComplete="name"
+                maxLength={120}
+                required
+                disabled={submittingApplication}
+              />
+            </label>
+            <label className="application-field">
+              Email address
+              <input
+                type="email"
+                value={applicantEmail}
+                onChange={(event) => setApplicantEmail(event.target.value)}
+                autoComplete="email"
+                maxLength={254}
+                required
+                disabled={submittingApplication}
+              />
+            </label>
+            <label className="application-field">
+              Resume (PDF or DOCX, up to 10 MB)
+              <input
+                type="file"
+                accept=".pdf,.docx"
+                required
+                disabled={submittingApplication}
+                onChange={(event) => {
+                  const selectedFile = event.target.files?.[0] ?? null;
+                  if (
+                    selectedFile &&
+                    !/\.(pdf|docx)$/i.test(selectedFile.name)
+                  ) {
+                    toast.error("Please select a PDF or DOCX resume.");
+                    event.target.value = "";
+                    setApplicantResume(null);
+                    return;
+                  }
+                  if (selectedFile && selectedFile.size > 10 * 1024 * 1024) {
+                    toast.error("Resume files must be 10 MB or smaller.");
+                    event.target.value = "";
+                    setApplicantResume(null);
+                    return;
+                  }
+                  setApplicantResume(selectedFile);
+                }}
+              />
+            </label>
+            {applicantResume && (
+              <p className="application-file-name">
+                Selected: {applicantResume.name}
+              </p>
+            )}
+            <div className="application-modal-actions">
+              <button
+                type="button"
+                className="application-cancel-button"
+                onClick={closeApplicationModal}
+                disabled={submittingApplication}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="application-submit-button"
+                disabled={submittingApplication || !applicantResume}
+              >
+                {submittingApplication ? "Submitting..." : "Submit Application"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* RESUME UPLOAD MODAL */}
       {isModalOpen && (
         <div
@@ -939,7 +2181,7 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         <button 
           onClick={() => {
             if (adminPassword === "Sparsh@123") {
-              setIsAdmin(true);
+              setIsAdminView(true);
               setShowAdminModal(false);
               setAdminPassword("");
             } else {
@@ -962,8 +2204,8 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
 )}
 
 {/* Admin Applications View */}
-{isAdmin && (
-  <div style={{ margin: "32px auto", maxWidth: "1200px", padding: "20px", background: "#18181b", borderRadius: "12px", border: "1px solid #27272a" }}>
+{isAdminView && (
+  <div className="mx-auto my-8 max-w-7xl space-y-5 rounded-xl border border-zinc-800 bg-zinc-950 p-6 text-white">
     <h2 style={{ color: "#10b981", marginBottom: "16px" }}>👑 Recruiter Admin Dashboard</h2>
     <p style={{ color: "#a1a1aa", marginBottom: "20px" }}>Total Applicants: {applications.length}</p>
     
@@ -1011,14 +2253,15 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         </div>
       </div>
 
-      <table style={{ width: "100%", textAlign: "left", color: "#fff", borderCollapse: "collapse" }}>
+      <div className="w-full overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 shadow-xl">
+      <table className="w-full min-w-[1000px] text-left">
         <thead>
-          <tr style={{ borderBottom: "1px solid #3f3f46", color: "#a1a1aa" }}>
-            <th style={{ padding: "12px" }}>Candidate</th>
-            <th style={{ padding: "12px" }}>Applied Job</th>
-            <th style={{ padding: "12px" }}>Match Score</th>
-            <th style={{ padding: "12px" }}>Status</th>
-            <th style={{ padding: "12px" }}>Actions</th>
+          <tr>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 border-b border-zinc-800">Candidate</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 border-b border-zinc-800">Applied Job</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 border-b border-zinc-800">Match Score</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 border-b border-zinc-800">Status</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 border-b border-zinc-800">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -1031,47 +2274,54 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
               return matchesStatus && matchesSearch;
             })
           .map((app) => (
-              <tr key={app.id} style={{ borderBottom: "1px solid #27272a" }}>
-                <td style={{ padding: "12px" }}>
+              <tr key={app.id} className="hover:bg-zinc-800/30">
+                <td className="px-4 py-4 text-sm text-zinc-200 border-b border-zinc-800/60">
                   {app.candidateName}<br/>
                   <span style={{ fontSize: "12px", color: "#71717a" }}>{app.email}</span>
                 </td>
-                <td style={{ padding: "12px" }}>{app.jobTitle}</td>
-                <td style={{ padding: "12px", color: "#10b981", fontWeight: "bold" }}>{app.matchScore}</td>
-                <td style={{ padding: "12px" }}>
-                  <span style={{
-                    padding: "4px 8px",
-                    borderRadius: "6px",
-                    fontSize: "12px",
-                    background: app.status === "Shortlisted" ? "#065f46" : app.status === "Rejected" ? "#7f1d1d" : "#3f3f46",
-                    color: "#fff"
-                  }}>
+                <td className="px-4 py-4 text-sm text-zinc-200 border-b border-zinc-800/60">{app.jobTitle}</td>
+                <td className="px-4 py-4 text-sm text-zinc-200 border-b border-zinc-800/60 font-bold text-emerald-400">{app.matchScore}</td>
+                <td className="px-4 py-4 text-sm text-zinc-200 border-b border-zinc-800/60">
+                  <span className={`rounded-md px-2 py-1 text-xs ${
+                    app.status === "Shortlisted"
+                      ? "bg-emerald-950 text-emerald-300"
+                      : app.status === "Rejected"
+                        ? "bg-rose-950 text-rose-300"
+                        : "bg-zinc-800 text-zinc-300"
+                  }`}>
                     {app.status}
                   </span>
                 </td>
-                <td style={{ padding: "12px" }}>
-                  <div style={{ display: "flex", gap: "6px" }}>
+                <td className="px-4 py-4 text-sm text-zinc-200 border-b border-zinc-800/60">
+                  <div className="flex items-center justify-end gap-2">
                     <button
-  onClick={() => setSelectedCandidate(app)}
-  style={{
-    padding: "4px 8px",
-    background: "#27272a",
-    color: "#fff",
-    border: "1px solid #3f3f46",
-    borderRadius: "4px",
-    cursor: "pointer",
-    fontSize: "12px",
+                      onClick={() => setSelectedCandidate(app)}
+                      className="px-2 py-1 text-xs font-medium text-zinc-400 transition-all hover:text-white"
+                    >
+                      Details
+                    </button>
+                    <button
+                      onClick={() => setSelectedSummaryCandidate(app)}
+                      className="px-2 py-1 text-xs font-medium text-zinc-400 transition-all hover:text-white"
+                    >
+                      View AI Summary
+                    </button>
+                    <button
+  onClick={() => {
+    if (app.resumeUrl) {
+      window.open(app.resumeUrl, "_blank");
+      return;
+    }
+    toast.error("No uploaded resume is available for this candidate.");
   }}
+  disabled={!app.resumeUrl}
+  className="px-2 py-1 text-xs font-medium text-zinc-400 transition-all hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
 >
   View Resume
 </button>
                     <button
-                      onClick={() => {
-                        setApplications((prev) =>
-                          prev.map((a) => (a.id === app.id ? { ...a, status: "Shortlisted" } : a))
-                        );
-                      }}
-                      style={{ padding: "4px 8px", background: "#10b981", color: "#000", border: "none", borderRadius: "4px", fontSize: "12px", fontWeight: "bold", cursor: "pointer" }}
+                      onClick={() => openInterviewScheduler(app)}
+                      className="px-3 py-1 rounded-md text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/30 transition-all"
                     >
                       Shortlist
                     </button>
@@ -1081,7 +2331,7 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                           prev.map((a) => (a.id === app.id ? { ...a, status: "Rejected" } : a))
                         );
                       }}
-                      style={{ padding: "4px 8px", background: "#ef4444", color: "#fff", border: "none", borderRadius: "4px", fontSize: "12px", fontWeight: "bold", cursor: "pointer" }}
+                      className="px-3 py-1 rounded-md text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/30 transition-all"
                     >
                       Reject
                     </button>
@@ -1091,8 +2341,243 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
             ))}
           </tbody>
     </table>
+    </div>
   </div>
 )}
+{schedulingApplication && (
+  <div
+    role="presentation"
+    onClick={(event) => {
+      if (event.target === event.currentTarget) setSchedulingApplication(null);
+    }}
+    style={{
+      position: "fixed",
+      inset: 0,
+      zIndex: 1100,
+      display: "grid",
+      placeItems: "center",
+      padding: "20px",
+      background: "rgba(0, 0, 0, 0.8)",
+    }}
+  >
+    <form
+      onSubmit={saveInterviewSchedule}
+      aria-labelledby="interview-scheduler-title"
+      style={{
+        width: "100%",
+        maxWidth: "460px",
+        display: "grid",
+        gap: "14px",
+        padding: "24px",
+        border: "1px solid #3f3f46",
+        borderRadius: "12px",
+        background: "#18181b",
+        color: "#fff",
+      }}
+    >
+      <div>
+        <h3 id="interview-scheduler-title" style={{ margin: 0, color: "#10b981" }}>
+          Schedule interview
+        </h3>
+        <p style={{ margin: "6px 0 0", color: "#a1a1aa", fontSize: "14px" }}>
+          {schedulingApplication.candidateName} · {schedulingApplication.jobTitle}
+        </p>
+      </div>
+      <label style={{ display: "grid", gap: "6px", fontSize: "14px" }}>
+        Interview date
+        <input
+          type="date"
+          value={interviewDate}
+          onChange={(event) => setInterviewDate(event.target.value)}
+          required
+          style={{ padding: "10px", borderRadius: "6px", border: "1px solid #3f3f46", background: "#09090b", color: "#fff" }}
+        />
+      </label>
+      <label style={{ display: "grid", gap: "6px", fontSize: "14px" }}>
+        Interview time
+        <input
+          type="time"
+          value={interviewTime}
+          onChange={(event) => setInterviewTime(event.target.value)}
+          required
+          style={{ padding: "10px", borderRadius: "6px", border: "1px solid #3f3f46", background: "#09090b", color: "#fff" }}
+        />
+      </label>
+      <label style={{ display: "grid", gap: "6px", fontSize: "14px" }}>
+        Meeting / Venue URL (Zoom, Google Meet, Teams, Maps)
+        <input
+          type="url"
+          value={interviewLocationUrl}
+          onChange={(event) => setInterviewLocationUrl(event.target.value)}
+          placeholder="https://zoom.us/... or meeting / venue link"
+          required
+          style={{ padding: "10px", borderRadius: "6px", border: "1px solid #3f3f46", background: "#09090b", color: "#fff" }}
+        />
+      </label>
+      <label style={{ display: "grid", gap: "6px", fontSize: "14px" }}>
+        HR contact number
+        <input
+          type="tel"
+          value={hrContactNumber}
+          onChange={(event) => setHrContactNumber(event.target.value)}
+          pattern="[0-9+() .-]{7,20}"
+          title="Enter a valid contact number (7 to 20 digits or phone symbols)."
+          placeholder="+1 555 123 4567"
+          required
+          style={{ padding: "10px", borderRadius: "6px", border: "1px solid #3f3f46", background: "#09090b", color: "#fff" }}
+        />
+      </label>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "4px" }}>
+        <button
+          type="button"
+          disabled={sendingInterviewNotification}
+          onClick={() => setSchedulingApplication(null)}
+          style={{ padding: "9px 14px", borderRadius: "6px", border: "1px solid #3f3f46", background: "#27272a", color: "#fff", cursor: "pointer" }}
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={sendingInterviewNotification}
+          style={{ padding: "9px 14px", borderRadius: "6px", border: "none", background: sendingInterviewNotification ? "#6b7280" : "#10b981", color: "#000", fontWeight: "bold", cursor: sendingInterviewNotification ? "wait" : "pointer" }}
+        >
+          {sendingInterviewNotification ? "Sending..." : "Save & Shortlist"}
+        </button>
+      </div>
+    </form>
+  </div>
+)}
+      {resumeAnalysis && (
+        <div className="resume-analysis-overlay">
+          <section
+            className="resume-analysis-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="resume-analysis-title"
+          >
+            <button
+              type="button"
+              className="resume-analysis-close"
+              onClick={() => setResumeAnalysis(null)}
+              aria-label="Close resume analysis"
+            >
+              ✕
+            </button>
+            <span className="eyebrow">AI RESUME SCAN</span>
+            <h2 id="resume-analysis-title">Resume Analysis Complete</h2>
+            <p className="resume-analysis-candidate">
+              Analysis for {resumeAnalysis.candidateName}
+            </p>
+            <div className="resume-ats-score">
+              <strong>{resumeAnalysis.atsScore}</strong>
+              <span>/100 ATS Resume Score</span>
+            </div>
+
+            <div className="resume-analysis-section">
+              <h3>Extracted Skills</h3>
+              {resumeAnalysis.extractedSkills.length > 0 ? (
+                <div className="resume-analysis-pills">
+                  {resumeAnalysis.extractedSkills.map((skill) => (
+                    <span key={skill}>{skill}</span>
+                  ))}
+                </div>
+              ) : (
+                <p className="resume-analysis-empty">
+                  No supported skills were detected in this resume.
+                </p>
+              )}
+            </div>
+
+            <div className="resume-analysis-section">
+              <h3>Recommended Roles</h3>
+              <div className="resume-analysis-pills resume-role-pills">
+                {resumeAnalysis.recommendedRoles.map((role) => (
+                  <span key={role}>{role}</span>
+                ))}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="resume-analysis-done"
+              onClick={() => setResumeAnalysis(null)}
+            >
+              Done
+            </button>
+          </section>
+        </div>
+      )}
+
+      {selectedSummaryCandidate && (
+        <div className="resume-analysis-overlay">
+          <section
+            className="resume-analysis-modal recruiter-ai-summary"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="recruiter-summary-title"
+          >
+            <button
+              type="button"
+              className="resume-analysis-close"
+              onClick={() => setSelectedSummaryCandidate(null)}
+              aria-label="Close candidate AI summary"
+            >
+              ✕
+            </button>
+            <span className="eyebrow">RECRUITER VIEW</span>
+            <h2 id="recruiter-summary-title">AI Candidate Summary</h2>
+            <p className="resume-analysis-candidate">
+              {selectedSummaryCandidate.candidateName} · {selectedSummaryCandidate.jobTitle}
+            </p>
+            {typeof selectedSummaryCandidate.atsScore === "number" ? (
+              <div className="resume-ats-score">
+                <strong>{selectedSummaryCandidate.atsScore}</strong>
+                <span>/100 ATS Resume Score</span>
+              </div>
+            ) : (
+              <p className="resume-analysis-empty">
+                No ATS analysis is available for this candidate yet.
+              </p>
+            )}
+            <div className="resume-analysis-section">
+              <h3>Parsed Candidate Strengths</h3>
+              {selectedSummaryCandidate.extractedSkills?.length ? (
+                <div className="resume-analysis-pills">
+                  {selectedSummaryCandidate.extractedSkills.map((skill) => (
+                    <span key={skill}>{skill}</span>
+                  ))}
+                </div>
+              ) : (
+                <p className="resume-analysis-empty">
+                  No parsed skills are available.
+                </p>
+              )}
+            </div>
+            <div className="resume-analysis-section">
+              <h3>Recommended Roles</h3>
+              {selectedSummaryCandidate.recommendedRoles?.length ? (
+                <div className="resume-analysis-pills resume-role-pills">
+                  {selectedSummaryCandidate.recommendedRoles.map((role) => (
+                    <span key={role}>{role}</span>
+                  ))}
+                </div>
+              ) : (
+                <p className="resume-analysis-empty">
+                  No role recommendations are available.
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              className="resume-analysis-done"
+              onClick={() => setSelectedSummaryCandidate(null)}
+            >
+              Close Summary
+            </button>
+          </section>
+        </div>
+      )}
+
 {/* Resume Preview Modal */}
       {selectedCandidate && (
         <div
@@ -1149,16 +2634,43 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
               <div style={{ background: "#09090b", padding: "12px", borderRadius: "6px", fontSize: "13px", color: "#a1a1aa" }}>
                 Candidate has experience matching key keywords in {selectedCandidate.jobTitle}. Strong problem solving and dynamic project expertise demonstrated.
               </div>
+              <p><strong>AI Generated Cover Letter</strong></p>
+              <div
+                style={{
+                  background: "#18181b",
+                  padding: "12px",
+                  borderRadius: "6px",
+                  fontSize: "14px",
+                  color: "#d4d4d8",
+                  maxHeight: "10rem",
+                  overflowY: "auto",
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                {selectedCandidate.coverLetter?.trim() || "No cover letter attached."}
+              </div>
             </div>
 
 {/* Modal Footer Buttons */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "20px" }}>
             <button
              onClick={() => {
-  const pdfPath = (selectedCandidate.resumeUrl && selectedCandidate.resumeUrl !== "#")
-    ? selectedCandidate.resumeUrl
-    : "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"; // Sample working PDF fallback
-  window.open(pdfPath, "_blank");
+  const resumeFile = selectedCandidate.resumeFile;
+  const isPdfFile =
+    resumeFile?.type === "application/pdf" ||
+    resumeFile?.name.toLowerCase().endsWith(".pdf");
+
+  if (resumeFile && isPdfFile) {
+    window.open(URL.createObjectURL(resumeFile), "_blank", "noopener,noreferrer");
+    return;
+  }
+
+  if (selectedCandidate.resumeUrl && selectedCandidate.resumeUrl !== "#") {
+    window.open(selectedCandidate.resumeUrl, "_blank", "noopener,noreferrer");
+    return;
+  }
+
+  toast.error("No uploaded resume is available for this candidate.");
 }}
               style={{
                 padding: "6px 14px",
@@ -1171,7 +2683,7 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                 fontSize: "13px",
               }}
             >
-              📄 View Full PDF
+              📄 View Resume
             </button>
 
             <button
@@ -1223,7 +2735,7 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
           }}
         >
           <button
-            onClick={() => setSelectedJob(null)}
+            onClick={handleCloseJobDetails}
             style={{
               position: "absolute",
               top: "16px",
@@ -1241,7 +2753,12 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
           {/* Header */}
           <div style={{ display: "flex", gap: "16px", alignItems: "center", marginBottom: "20px" }}>
             <div className="company-logo" style={{ width: "56px", height: "56px", fontSize: "20px" }}>
-              {selectedJob.logo}
+              {selectedJob.company
+                .split(" ")
+                .map((word) => word[0])
+                .join("")
+                .slice(0, 2)
+                .toUpperCase()}
             </div>
             <div>
               <h2 style={{ margin: "0 0 4px", fontSize: "22px", fontWeight: "700" }}>{selectedJob.title}</h2>
@@ -1260,7 +2777,7 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
               💰 {selectedJob.salary}
             </span>
             <span style={{ background: "rgba(16, 185, 129, 0.15)", color: "#10b981", padding: "6px 12px", borderRadius: "8px", fontSize: "13px", fontWeight: "600" }}>
-              ⚡ {selectedJob.match ?? 85}% Match
+              ⚡ {selectedJob.matchScore}% Match
             </span>
           </div>
 
@@ -1295,18 +2812,87 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
             </div>
           </div>
 
-          {/* Action Buttons */}
+          <section className="salary-benchmark-card" aria-live="polite">
+            <div className="salary-benchmark-heading">
+              <div>
+                <h3>💰 AI Market Salary Benchmark</h3>
+                <p>
+                  Indicative estimate based on role, experience, skills, and
+                  location; not a live salary feed.
+                </p>
+              </div>
+              <span className="salary-benchmark-badge">Real-Time Data</span>
+            </div>
+            <div className="salary-benchmark-controls">
+              <label htmlFor="salary-experience-years">Experience</label>
+              <input
+                id="salary-experience-years"
+                type="number"
+                min="0"
+                max="50"
+                step="1"
+                value={salaryExperienceYears}
+                onChange={(event) => {
+                  const years = Number(event.target.value);
+                  if (Number.isInteger(years) && years >= 0 && years <= 50) {
+                    setSalaryExperienceYears(years);
+                    void fetchSalaryBenchmark(selectedJob, years);
+                  }
+                }}
+              />
+              <span>
+                {salaryExperienceYears === 1
+                  ? "year"
+                  : "years"}
+              </span>
+            </div>
+            <p className="salary-benchmark-role">
+              Estimate for <strong>{selectedJob.title}</strong> with{" "}
+              {salaryExperienceYears}{" "}
+              {salaryExperienceYears === 1 ? "year" : "years"} of experience
+            </p>
+            {salaryBenchmarkLoading ? (
+              <p className="salary-benchmark-loading" role="status">
+                Calculating your salary range…
+              </p>
+            ) : salaryBenchmarkError ? (
+              <div className="salary-benchmark-error" role="alert">
+                <span>{salaryBenchmarkError}</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void fetchSalaryBenchmark(selectedJob, salaryExperienceYears)
+                  }
+                >
+                  Retry
+                </button>
+              </div>
+            ) : salaryBenchmark ? (
+              <>
+                <p className="salary-benchmark-range">
+                  {salaryBenchmark.formattedRange}
+                </p>
+                <ul className="salary-benchmark-insights">
+                  {salaryBenchmark.insights.map((insight) => (
+                    <li key={insight}>{insight}</li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+          </section>
+{/* Action Buttons */}
           <div style={{ display: "flex", gap: "12px", marginTop: "28px" }}>
             <button
               onClick={() => {
-                handleApplyJob(selectedJob.id);
-                alert(`Application submitted for ${selectedJob.title} at ${selectedJob.company}!`);
-                setSelectedJob(null);
+                setApplicantName("");
+                setApplicantEmail("");
+                setApplicantResume(null);
+                setApplicationJob(selectedJob);
               }}
               style={{
                 flex: 1,
                 backgroundColor: appliedJobIds.includes(selectedJob.id) ? "#374151" : "#10b981",
-                color: appliedJobIds.includes(selectedJob.id) ? "#9ca3af" : "#000000",
+                color: "#000000",
                 fontWeight: "700",
                 padding: "12px",
                 borderRadius: "12px",
@@ -1316,10 +2902,30 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
               }}
               disabled={appliedJobIds.includes(selectedJob.id)}
             >
-              {appliedJobIds.includes(selectedJob.id) ? "Already Applied" : "Apply Now"}
+              {appliedJobIds.includes(selectedJob.id) ? "Already Applied" : "Apply with Resume"}
             </button>
+
             <button
-              onClick={() => setSelectedJob(null)}
+              onClick={() => handleGenerateCoverLetter(selectedJob.title, selectedJob.company)}
+              style={{
+                background: 'transparent',
+                color: '#00FF66',
+                border: '1px solid #00FF66',
+                padding: '12px 20px',
+                borderRadius: '12px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '15px',
+              }}
+            >
+              ✨ Generate AI Cover Letter
+            </button>
+
+            <button
+              onClick={handleCloseJobDetails}
               style={{
                 backgroundColor: "transparent",
                 border: "1px solid #374151",
@@ -1332,12 +2938,356 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
               Close
             </button>
           </div>
+
+          {showCLModal && (
+            <div
+              style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                width: "100vw",
+                height: "100vh",
+                background: "rgba(0, 0, 0, 0.8)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 1000,
+              }}
+            >
+              <div
+                style={{
+                  background: "#121212",
+                  border: "1px solid #00FF66",
+                  borderRadius: "12px",
+                  padding: "24px",
+                  maxWidth: "600px",
+                  width: "90%",
+                  color: "#fff",
+                  boxShadow: "0 0 20px rgba(0, 255, 102, 0.15)",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: "16px",
+                  }}
+                >
+                  <h3 style={{ margin: 0, color: "#00FF66", fontSize: "18px" }}>
+                    ✨ AI Generated Cover Letter
+                  </h3>
+                  <button
+                    onClick={() => setShowCLModal(false)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#888",
+                      cursor: "pointer",
+                      fontSize: "18px",
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {isGeneratingCL ? (
+                  <p
+                    style={{
+                      color: "#aaa",
+                      padding: "20px 0",
+                      textAlign: "center",
+                    }}
+                  >
+                    Crafting personalized cover letter using AI...
+                  </p>
+                ) : (
+                  <>
+                    <textarea
+                      value={coverLetter}
+                      onChange={(e) => setCoverLetter(e.target.value)}
+                      rows={10}
+                      style={{
+                        width: "100%",
+                        background: "#09090b",
+                        color: "#e4e4e7",
+                        border: "1px solid #27272a",
+                        borderRadius: "8px",
+                        padding: "12px",
+                        fontFamily: "monospace",
+                        fontSize: "13px",
+                        resize: "vertical",
+                      }}
+                    />
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "12px",
+                        marginTop: "16px",
+                        justifyContent: "flex-end",
+                      }}
+                    >
+                      <button
+                        onClick={() => setShowCLModal(false)}
+                        style={{
+                          background: "#27272a",
+                          color: "#fff",
+                          border: "none",
+                          padding: "10px 16px",
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     )}
-  </main>
-);
-}
+    {interviewPrepJob && (
+      <div
+        className="interview-prep-overlay"
+        role="presentation"
+        onClick={(event) => {
+          if (
+            event.target === event.currentTarget &&
+              !mockInterviewLoading &&
+              !polishingInterviewAnswer
+          ) {
+            setInterviewPrepJob(null);
+          }
+        }}
+      >
+        <section
+          className="interview-prep-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="interview-prep-title"
+        >
+          <header className="interview-prep-header">
+            <div>
+              <span className="interview-prep-eyebrow">PERSONALIZED PRACTICE</span>
+              <h2 id="interview-prep-title">
+                AI Interview Coach for {interviewPrepJob.title}
+              </h2>
+            </div>
+            <button
+              type="button"
+              aria-label="Close interview prep"
+              onClick={() => setInterviewPrepJob(null)}
+              disabled={mockInterviewLoading || polishingInterviewAnswer}
+            >
+              ✕
+            </button>
+          </header>
+
+          <nav className="interview-prep-tabs" aria-label="Interview preparation mode">
+            <button
+              type="button"
+              className={activePrepTab === "mock" ? "active" : ""}
+              aria-pressed={activePrepTab === "mock"}
+              onClick={() => setActivePrepTab("mock")}
+            >
+              🎙️ Mock Interviewer
+            </button>
+            <button
+              type="button"
+              className={activePrepTab === "english" ? "active" : ""}
+              aria-pressed={activePrepTab === "english"}
+              onClick={() => setActivePrepTab("english")}
+            >
+              ✍️ English Express Assistant (Hinglish to Corporate)
+            </button>
+          </nav>
+
+          {activePrepTab === "english" ? (
+            <div className="english-express-content">
+              <p className="english-express-subtitle">
+                Translate your Hindi/Hinglish rough answer into professional corporate English.
+              </p>
+              <div className="english-express-grid grid grid-cols-1 md:grid-cols-2 gap-4">
+                <section className="english-answer-panel">
+                  <label htmlFor="rough-interview-answer">
+                    Your Rough Answer (Hindi / Hinglish)
+                  </label>
+                  <textarea
+                    id="rough-interview-answer"
+                    value={roughInterviewAnswer}
+                    onChange={(event) => setRoughInterviewAnswer(event.target.value)}
+                    placeholder="Yahan Hindi/Hinglish mein type karein..."
+                    rows={8}
+                    disabled={polishingInterviewAnswer}
+                  />
+                </section>
+                <section className="english-answer-panel english-output-panel">
+                  <div className="english-output-heading">
+                    <h3>Converted English Answer</h3>
+                    <button
+                      type="button"
+                      onClick={handleCopyPolishedAnswer}
+                      disabled={!polishedInterviewAnswer}
+                    >
+                      📋 Copy Answer
+                    </button>
+                  </div>
+                  <div className="polished-answer-card" aria-live="polite">
+                    {polishingInterviewAnswer ? (
+                      <p className="english-output-placeholder">
+                        Converting your answer...
+                      </p>
+                    ) : polishedInterviewAnswer ? (
+                      <>
+                        <p className="polished-answer-text">
+                          {polishedInterviewAnswer}
+                        </p>
+                        {interviewVocabulary.length > 0 && (
+                          <div className="interview-vocabulary">
+                            <h4>Key Vocabulary Used</h4>
+                            <div>
+                              {interviewVocabulary.map((word) => (
+                                <span key={word}>{word}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {interviewProTip && (
+                          <aside className="interview-pro-tip">
+                            <strong>💡 Pro Tip for Interview</strong>
+                            <p>{interviewProTip}</p>
+                          </aside>
+                        )}
+                      </>
+                    ) : (
+                      <p className="english-output-placeholder">
+                        Your professional English answer will appear here.
+                      </p>
+                    )}
+                  </div>
+                </section>
+                <button
+                  type="button"
+                  className="english-express-convert english-express-convert-full"
+                  onClick={handlePolishInterviewAnswer}
+                  disabled={polishingInterviewAnswer || !roughInterviewAnswer.trim()}
+                >
+                  {polishingInterviewAnswer ? (
+                    <>
+                      <span className="english-express-spinner" aria-hidden="true" />
+                      Polishing your answer...
+                    </>
+                  ) : (
+                    "✨ Convert to Professional English"
+                  )}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="mock-interview-content">
+              <div className="mock-interview-chat" aria-live="polite">
+                {mockInterviewTurns.map((turn, index) => (
+                  <div className="mock-interview-exchange" key={`mock-turn-${index}`}>
+                    <div className="mock-chat-message mock-ai-message">
+                      <span className="mock-chat-avatar">AI</span>
+                      <div>
+                        <span className="mock-chat-speaker">AI Interviewer</span>
+                        <p>{turn.question}</p>
+                      </div>
+                    </div>
+                    {turn.candidateAnswer && (
+                      <>
+                        <div className="mock-chat-message mock-candidate-message">
+                          <span className="mock-chat-avatar">You</span>
+                          <div>
+                            <span className="mock-chat-speaker">Your answer</span>
+                            <p>{turn.candidateAnswer}</p>
+                          </div>
+                        </div>
+                        {turn.feedback && (
+                          <section className="ai-feedback-card" aria-label="AI Feedback">
+                            <div className="ai-feedback-heading">
+                              <strong>AI Feedback</strong>
+                              <span
+                                className={`ai-feedback-score ${
+                                  turn.feedback.score >= 8
+                                    ? "score-high"
+                                    : "score-average"
+                                }`}
+                              >
+                                Score: {turn.feedback.score.toFixed(1)}/10
+                              </span>
+                            </div>
+                            <p><strong>✅ What went well</strong></p>
+                            <ul><li>{turn.feedback.whatWentWell}</li></ul>
+                            <p><strong>💡 Improvement Tips</strong></p>
+                            <ul><li>{turn.feedback.improvementTip}</li></ul>
+                          </section>
+                        )}
+                      </>
+                    )}
+                  </div>
+                ))}
+                {mockInterviewLoading && (
+                  <div className="mock-evaluation-loading" role="status">
+                    <span className="mock-loading-dot" />
+                    AI is reviewing your answer...
+                  </div>
+                )}
+              </div>
+              <div className="mock-interview-composer">
+                <label htmlFor="mock-interview-answer">Your answer</label>
+                <div className="mock-answer-input-row">
+                  <textarea
+                    id="mock-interview-answer"
+                    value={mockInterviewAnswer}
+                    onChange={(event) => setMockInterviewAnswer(event.target.value)}
+                    placeholder="Type your answer here..."
+                    rows={3}
+                    disabled={mockInterviewLoading}
+                  />
+                  <button
+                    type="button"
+                    className="mock-mic-button"
+                    aria-label="Microphone speech input demo"
+                    title="Speech input demo"
+                    onClick={() => toast("🎙️ Voice input demo coming soon.")}
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <rect x="9" y="2" width="6" height="12" rx="3" />
+                      <path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8" />
+                    </svg>
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="mock-submit-answer"
+                  onClick={handleSubmitMockInterviewAnswer}
+                  disabled={mockInterviewLoading || !mockInterviewAnswer.trim()}
+                >
+                  {mockInterviewLoading ? "Evaluating..." : "Submit Answer"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          <footer className="interview-prep-footer">
+            <button
+              type="button"
+              className="prep-close-button"
+              onClick={() => setInterviewPrepJob(null)}
+              disabled={mockInterviewLoading || polishingInterviewAnswer}
+            >
+              Close
+            </button>
+          </footer>
+        </section>
+      </div>
+    )}
+</main>); }
 
 function SearchIcon() {
   return (

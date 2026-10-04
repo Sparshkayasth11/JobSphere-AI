@@ -32,13 +32,7 @@ export function parseResumeText(text: string) {
     });
   }
 
-  // Fallback skills if none are found in text
-  const finalSkills =
-    extractedSkills.length > 0
-      ? extractedSkills
-      : ["JavaScript", "React", "Node.js"];
-
-  return { extractedSkills: finalSkills };
+  return { extractedSkills };
 }
 export function calculateJobMatch(
   userSkills: string[],
