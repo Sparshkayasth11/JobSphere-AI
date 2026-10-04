@@ -513,6 +513,7 @@ const normalizeJobs = (apiJobs: ApiJob[]): Job[] =>
   });
 
 export default function Home() {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [location, setLocation] = useState("");
   const [searched, setSearched] = useState(false);
@@ -1411,12 +1412,59 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
           </div>
           <button
             type="button"
-            onClick={() => setShowAdminModal(true)}
-            className="shrink-0 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-zinc-700 md:hidden"
+            aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={isMobileMenuOpen}
+            onClick={() => setIsMobileMenuOpen((open) => !open)}
+            className="shrink-0 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-lg leading-none text-white transition-colors hover:bg-zinc-700 md:hidden"
           >
-            🔒 Admin
+            {isMobileMenuOpen ? "✕" : "☰"}
           </button>
         </div>
+        {isMobileMenuOpen && (
+          <div className="absolute left-0 right-0 top-full flex flex-col gap-4 border-b border-zinc-800 bg-zinc-900 p-6 text-white shadow-xl animate-in slide-in-from-top-2 md:hidden">
+            <a
+              href="#jobs"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="text-sm text-zinc-200 hover:text-white"
+            >
+              Find Jobs
+            </a>
+            <a
+              href="#ai"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="text-sm text-zinc-200 hover:text-white"
+            >
+              AI Assistant
+            </a>
+            <a
+              href="/pricing"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="rounded-lg bg-emerald-500 px-4 py-2.5 text-center text-sm font-semibold text-zinc-950 transition-colors hover:bg-emerald-400"
+            >
+              ✨ Pro Plans
+            </a>
+            <button
+              type="button"
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                setIsModalOpen(true);
+              }}
+              className="rounded-lg border border-zinc-700 px-4 py-2.5 text-left text-sm font-medium text-white transition-colors hover:bg-zinc-800"
+            >
+              Upload Resume
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                setShowAdminModal(true);
+              }}
+              className="rounded-lg border border-zinc-700 px-4 py-2.5 text-left text-sm font-medium text-white transition-colors hover:bg-zinc-800"
+            >
+              🔒 Admin Access
+            </button>
+          </div>
+        )}
       </nav>
 
       {/* HERO */}
