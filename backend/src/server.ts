@@ -93,7 +93,9 @@ type AppliedCandidate = {
 };
 
 const backendDirectory = dirname(fileURLToPath(import.meta.url));
-const uploadsDirectory = resolve(backendDirectory, "../uploads");
+const uploadsDirectory = resolve(
+  process.env.UPLOADS_DIR || resolve(backendDirectory, "../uploads"),
+);
 mkdirSync(uploadsDirectory, { recursive: true });
 const appliedCandidates: AppliedCandidate[] = [];
 
@@ -247,6 +249,16 @@ app.use(
 );
 app.use(express.json());
 app.use("/uploads", express.static(uploadsDirectory));
+app.use(
+  "/uploads",
+  (_req: Request, res: Response) => {
+    res.status(404).json({
+      success: false,
+      message:
+        "Resume file not found. It may have been removed after a server restart; ask the candidate to upload it again.",
+    });
+  },
+);
 
 // File upload setup using memory buffer
 const upload = multer({ storage: multer.memoryStorage() });

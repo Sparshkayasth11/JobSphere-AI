@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 // Import resume agent logic
 import { parseResumeText, calculateJobMatch } from "./resumeAgent.js";
 const backendDirectory = dirname(fileURLToPath(import.meta.url));
-const uploadsDirectory = resolve(backendDirectory, "../uploads");
+const uploadsDirectory = resolve(process.env.UPLOADS_DIR || resolve(backendDirectory, "../uploads"));
 mkdirSync(uploadsDirectory, { recursive: true });
 const appliedCandidates = [];
 const salaryRoleBenchmarks = [
@@ -139,6 +139,12 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use("/uploads", express.static(uploadsDirectory));
+app.use("/uploads", (_req, res) => {
+    res.status(404).json({
+        success: false,
+        message: "Resume file not found. It may have been removed after a server restart; ask the candidate to upload it again.",
+    });
+});
 // File upload setup using memory buffer
 const upload = multer({ storage: multer.memoryStorage() });
 const applyResumeUpload = multer({
