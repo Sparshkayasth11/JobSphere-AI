@@ -5,6 +5,90 @@ import toast from 'react-hot-toast';
 
 const API_BASE = "https://jobsphere-ai-zxkj.onrender.com";
 
+function getCandidateResumeUrl(resumeUrl?: string): string | null {
+  if (!resumeUrl || resumeUrl === "#") return null;
+
+  try {
+    const url = new URL(resumeUrl, API_BASE);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+
+    if (
+      url.hostname === "localhost" ||
+      url.hostname.endsWith(".localhost") ||
+      url.hostname === "127.0.0.1" ||
+      url.hostname === "0.0.0.0"
+    ) {
+      return `${API_BASE}${url.pathname}${url.search}${url.hash}`;
+    }
+
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function getSafeHttpUrl(value?: string): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:"
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function getInterviewPlatform(meetingLink: string): {
+  name: string;
+  playStoreUrl?: string;
+} {
+  try {
+    const url = new URL(meetingLink);
+    const hostname = url.hostname.toLowerCase();
+
+    if (hostname === "zoom.us" || hostname.endsWith(".zoom.us")) {
+      return {
+        name: "Zoom",
+        playStoreUrl:
+          "https://play.google.com/store/apps/details?id=us.zoom.videomeetings",
+      };
+    }
+    if (hostname === "meet.google.com") {
+      return {
+        name: "Google Meet",
+        playStoreUrl:
+          "https://play.google.com/store/apps/details?id=com.google.android.apps.tachyon",
+      };
+    }
+    if (
+      hostname === "teams.microsoft.com" ||
+      hostname.endsWith(".teams.microsoft.com") ||
+      hostname === "teams.live.com"
+    ) {
+      return {
+        name: "Microsoft Teams",
+        playStoreUrl:
+          "https://play.google.com/store/apps/details?id=com.microsoft.teams",
+      };
+    }
+    if (
+      hostname === "maps.google.com" ||
+      (hostname.includes("google.") && url.pathname.toLowerCase().includes("/maps"))
+    ) {
+      return {
+        name: "Google Maps",
+        playStoreUrl:
+          "https://play.google.com/store/apps/details?id=com.google.android.apps.maps",
+      };
+    }
+  } catch {
+    return { name: "Interview platform" };
+  }
+
+  return { name: "Interview platform" };
+}
+
 async function readApiJson(response: Response): Promise<unknown> {
   const contentType = response.headers.get("content-type") ?? "";
   const body = await response.text();
@@ -384,18 +468,24 @@ function AdminApplicantsTable({
                       >
                         View AI Summary
                       </button>
-                      <button
-                        type="button"
-                        disabled={!candidate.resumeUrl}
-                        onClick={() => {
-                          if (candidate.resumeUrl) {
-                            window.open(candidate.resumeUrl, "_blank");
+                      <a
+                        href={getCandidateResumeUrl(candidate.resumeUrl) ?? undefined}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-disabled={!getCandidateResumeUrl(candidate.resumeUrl)}
+                        onClick={(event) => {
+                          if (!getCandidateResumeUrl(candidate.resumeUrl)) {
+                            event.preventDefault();
                           }
                         }}
-                        className="px-2 py-1 text-xs font-medium text-zinc-400 transition-all hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                        className={`px-2 py-1 text-xs font-medium text-zinc-400 transition-all hover:text-white ${
+                          getCandidateResumeUrl(candidate.resumeUrl)
+                            ? ""
+                            : "cursor-not-allowed opacity-40"
+                        }`}
                       >
                         View Resume
-                      </button>
+                      </a>
                       <button
                         type="button"
                         onClick={() => onShortlist(candidate)}
@@ -595,6 +685,8 @@ const [interviewTime, setInterviewTime] = useState("");
 const [interviewLocationUrl, setInterviewLocationUrl] = useState("");
 const [hrContactNumber, setHrContactNumber] = useState("");
 const [sendingInterviewNotification, setSendingInterviewNotification] = useState(false);
+const [selectedInterviewApplication, setSelectedInterviewApplication] =
+  useState<Application | null>(null);
   // Resume Upload & AI Agent States
  const [isModalOpen, setIsModalOpen] = useState(false);
  const [uploading, setUploading] = useState(false);
@@ -1938,8 +2030,7 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                   >
                     ✨ Prepare with AI
                   </button>
-                  {activeTab === "applied" &&
-                    (() => {
+                  {(() => {
                       const application = applications.find(
                         (candidateApplication) =>
                           candidateApplication.jobId === job.id,
@@ -1948,12 +2039,14 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                         application?.status !== "Shortlisted" ||
                         !application.interviewDate ||
                         !application.interviewTime ||
-                        !application.interviewLocationUrl ||
-                        !application.hrContactNumber
+                        !application.interviewLocationUrl
                       ) {
                         return null;
                       }
 
+                      const platform = getInterviewPlatform(
+                        application.interviewLocationUrl,
+                      );
                       const formattedInterviewDate = new Date(
                         `${application.interviewDate}T00:00:00`,
                       ).toLocaleDateString(undefined, {
@@ -1967,10 +2060,24 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                           <h4>Interview Confirmed</h4>
                           <p><strong>Date:</strong> {formattedInterviewDate}</p>
                           <p><strong>Time:</strong> {application.interviewTime}</p>
-                          <p>
-                            <strong>HR Contact:</strong>{" "}
-                            <a href={`tel:${application.hrContactNumber}`}>{application.hrContactNumber}</a>
-                          </p>
+                          {application.hrContactNumber && (
+                            <p>
+                              <strong>HR Contact:</strong>{" "}
+                              <a href={`tel:${application.hrContactNumber}`}>
+                                {application.hrContactNumber}
+                              </a>
+                            </p>
+                          )}
+                          <p><strong>Platform:</strong> {platform.name}</p>
+                          <button
+                            type="button"
+                            className="help-center-button"
+                            onClick={() =>
+                              setSelectedInterviewApplication(application)
+                            }
+                          >
+                            Interview Details
+                          </button>
                           <a
                             className="help-center-button"
                             href={application.interviewLocationUrl}
@@ -2473,19 +2580,25 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                     >
                       View AI Summary
                     </button>
-                    <button
-  onClick={() => {
-    if (app.resumeUrl) {
-      window.open(app.resumeUrl, "_blank");
-      return;
-    }
-    toast.error("No uploaded resume is available for this candidate.");
-  }}
-  disabled={!app.resumeUrl}
-  className="px-2 py-1 text-xs font-medium text-zinc-400 transition-all hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
->
-  View Resume
-</button>
+                    <a
+                      href={getCandidateResumeUrl(app.resumeUrl) ?? undefined}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-disabled={!getCandidateResumeUrl(app.resumeUrl)}
+                      onClick={(event) => {
+                        if (!getCandidateResumeUrl(app.resumeUrl)) {
+                          event.preventDefault();
+                          toast.error("No uploaded resume is available for this candidate.");
+                        }
+                      }}
+                      className={`px-2 py-1 text-xs font-medium text-zinc-400 transition-all hover:text-white ${
+                        getCandidateResumeUrl(app.resumeUrl)
+                          ? ""
+                          : "cursor-not-allowed opacity-40"
+                      }`}
+                    >
+                      View Resume
+                    </a>
                     <button
                       onClick={() => openInterviewScheduler(app)}
                       className="px-3 py-1 rounded-md text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/30 transition-all"
@@ -2614,6 +2727,129 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     </form>
   </div>
 )}
+      {selectedInterviewApplication &&
+        (() => {
+          const application = selectedInterviewApplication;
+          const meetingLink = getSafeHttpUrl(
+            application.interviewLocationUrl,
+          );
+          const platform = getInterviewPlatform(
+            application.interviewLocationUrl ?? "",
+          );
+          const interviewDateValue = application.interviewDate
+            ? new Date(`${application.interviewDate}T00:00:00`)
+            : null;
+          const formattedDate =
+            interviewDateValue && !Number.isNaN(interviewDateValue.getTime())
+              ? interviewDateValue.toLocaleDateString(undefined, {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })
+              : application.interviewDate || "Not provided";
+
+          return (
+            <div
+              className="fixed inset-0 z-[1250] grid place-items-center bg-black/80 p-5 backdrop-blur-sm"
+              onClick={(event) => {
+                if (event.target === event.currentTarget) {
+                  setSelectedInterviewApplication(null);
+                }
+              }}
+            >
+              <section
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="interview-details-title"
+                className="relative w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-950 p-6 text-white shadow-2xl"
+              >
+                <button
+                  type="button"
+                  aria-label="Close interview details"
+                  onClick={() => setSelectedInterviewApplication(null)}
+                  className="absolute right-4 top-4 rounded-md border border-zinc-700 px-2 py-1 text-zinc-400 hover:text-white"
+                >
+                  ✕
+                </button>
+                <span className="text-xs font-semibold uppercase tracking-widest text-emerald-400">
+                  Interview confirmed
+                </span>
+                <h2
+                  id="interview-details-title"
+                  className="mt-2 pr-8 text-xl font-bold"
+                >
+                  Interview Details
+                </h2>
+                <p className="mt-1 text-sm text-zinc-400">
+                  {application.jobTitle} · {application.company || "JobSphere"}
+                </p>
+
+                <dl className="mt-5 grid gap-3 rounded-xl border border-zinc-800 bg-zinc-900/70 p-4 text-sm">
+                  <div>
+                    <dt className="text-xs text-zinc-500">Platform</dt>
+                    <dd className="mt-1 font-medium text-zinc-100">
+                      {platform.name}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-zinc-500">Date</dt>
+                    <dd className="mt-1 font-medium text-zinc-100">
+                      {formattedDate}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-zinc-500">Time</dt>
+                    <dd className="mt-1 font-medium text-zinc-100">
+                      {application.interviewTime || "Not provided"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-zinc-500">HR Contact</dt>
+                    <dd className="mt-1 font-medium text-zinc-100">
+                      {application.hrContactNumber ? (
+                        <a
+                          href={`tel:${application.hrContactNumber}`}
+                          className="text-emerald-300 hover:underline"
+                        >
+                          {application.hrContactNumber}
+                        </a>
+                      ) : (
+                        "Not provided"
+                      )}
+                    </dd>
+                  </div>
+                </dl>
+
+                <div className="mt-5 grid gap-3">
+                  {meetingLink ? (
+                    <a
+                      href={meetingLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-lg bg-emerald-500 px-4 py-3 text-center text-sm font-bold text-zinc-950 transition-colors hover:bg-emerald-400"
+                    >
+                      Join Meeting
+                    </a>
+                  ) : (
+                    <p className="text-sm text-amber-300">
+                      The meeting link is unavailable or invalid.
+                    </p>
+                  )}
+                  {platform.playStoreUrl && (
+                    <a
+                      href={platform.playStoreUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-lg border border-zinc-700 px-4 py-3 text-center text-sm font-semibold text-zinc-200 transition-colors hover:border-emerald-500 hover:text-white"
+                    >
+                      Download App (Play Store)
+                    </a>
+                  )}
+                </div>
+              </section>
+            </div>
+          );
+        })()}
       {resumeAnalysis && (
         <div className="resume-analysis-overlay">
           <section
@@ -2832,8 +3068,9 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     return;
   }
 
-  if (selectedCandidate.resumeUrl && selectedCandidate.resumeUrl !== "#") {
-    window.open(selectedCandidate.resumeUrl, "_blank", "noopener,noreferrer");
+  const resumeUrl = getCandidateResumeUrl(selectedCandidate.resumeUrl);
+  if (resumeUrl) {
+    window.open(resumeUrl, "_blank", "noopener,noreferrer");
     return;
   }
 
