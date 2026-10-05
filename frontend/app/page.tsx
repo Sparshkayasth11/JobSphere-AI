@@ -12,16 +12,22 @@ function getCandidateResumeUrl(resumeUrl?: string): string | null {
     const url = new URL(resumeUrl, API_BASE);
     if (url.protocol !== "http:" && url.protocol !== "https:") return null;
 
-    if (
-      url.hostname === "localhost" ||
-      url.hostname.endsWith(".localhost") ||
-      url.hostname === "127.0.0.1" ||
-      url.hostname === "0.0.0.0"
-    ) {
-      return `${API_BASE}${url.pathname}${url.search}${url.hash}`;
+    const pathSegments = url.pathname.split("/").filter(Boolean);
+    const uploadsIndex = pathSegments.findIndex(
+      (segment) => segment.toLowerCase() === "uploads",
+    );
+    const fileSegments =
+      uploadsIndex >= 0
+        ? pathSegments.slice(uploadsIndex + 1)
+        : pathSegments;
+    while (fileSegments[0]?.toLowerCase() === "uploads") {
+      fileSegments.shift();
     }
 
-    return url.toString();
+    if (fileSegments.length === 0) return null;
+
+    const cleanPath = fileSegments.join("/");
+    return `${API_BASE}/uploads/${cleanPath}${url.search}${url.hash}`;
   } catch {
     return null;
   }
