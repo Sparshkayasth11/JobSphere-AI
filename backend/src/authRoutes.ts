@@ -450,7 +450,16 @@ export function registerAuthRoutes(
 
         const pendingPasswordHash = await hashPassword(password);
         const otp = String(randomInt(100000, 1000000));
-        await sendSignupOtpEmail(normalizedEmail, otp);
+        let deliveryMode: "email" | "console" = "email";
+        try {
+          await sendSignupOtpEmail(normalizedEmail, otp);
+        } catch (error) {
+          deliveryMode = "console";
+          console.warn(
+            `SMTP delivery unavailable for ${normalizedEmail}; use signup OTP ${otp} before it expires.`,
+            error,
+          );
+        }
         pendingSignups.set(normalizedEmail, {
           id: randomUUID(),
           name: name.trim(),
@@ -466,7 +475,15 @@ export function registerAuthRoutes(
           email: normalizedEmail,
           expiresInSeconds: OTP_TTL_MS / 1000,
           requiresOtpVerification: true,
-          message: "A verification code was sent to your email. It expires in 10 minutes.",
+          deliveryMode,
+          ...(deliveryMode === "console" &&
+          process.env.NODE_ENV !== "production"
+            ? { otp }
+            : {}),
+          message:
+            deliveryMode === "email"
+              ? "A verification code was sent to your email. It expires in 10 minutes."
+              : "Email delivery is unavailable. Use the OTP shown in the backend console to verify your account.",
         });
       } catch (error) {
         console.error("Signup OTP delivery failed:", error);
