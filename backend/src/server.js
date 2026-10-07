@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 import multer from "multer";
 import pdfParse from "pdf-parse";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, unlinkSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 // Import resume agent logic
@@ -100,6 +100,65 @@ function getRecommendedRoles(skills) {
     }
     return roles.length > 0 ? [...new Set(roles)].slice(0, 4) : ["Software Developer"];
 }
+const invalidResumeDocumentMessage = "Invalid document. Please upload a valid resume containing work history and skills.";
+class InvalidResumeDocumentError extends Error {
+}
+function isValidResumeContent(text) {
+    const normalizedText = text.toLowerCase();
+    const hasSkills = /\bskills?\b/.test(normalizedText);
+    const resumeSectionCount = [
+        /\bexperience\b|\bwork history\b|\bemployment\b/.test(normalizedText),
+        hasSkills,
+        /\beducation\b|\bacademic\b/.test(normalizedText),
+        /\bprojects?\b/.test(normalizedText),
+    ].filter(Boolean).length;
+    const hasContactDetails = /\bcontact\b/.test(normalizedText) ||
+        /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(text) ||
+        /(?:\+?\d[\d\s().-]{7,}\d)/.test(text);
+    return hasSkills && resumeSectionCount >= 2 && hasContactDetails;
+}
+async function extractValidatedPdfText(buffer) {
+    let text;
+    try {
+        const pdfData = await pdfParse(buffer);
+        text = pdfData.text;
+    }
+    catch {
+        throw new InvalidResumeDocumentError(invalidResumeDocumentMessage);
+    }
+    if (!isValidResumeContent(text)) {
+        throw new InvalidResumeDocumentError(invalidResumeDocumentMessage);
+    }
+    return text;
+}
+function getAiRecommendation(matchScore, matchedSkills) {
+    const skillSummary = matchedSkills.length > 0
+        ? matchedSkills.slice(0, 3).join(" & ")
+        : "the required skills";
+    if (matchScore >= 75) {
+        return {
+            status: "approve",
+            reason: `High skill match with ${skillSummary} (${matchScore}%). Recommended for shortlist.`,
+        };
+    }
+    if (matchScore >= 50) {
+        return {
+            status: "review",
+            reason: `Partial skill match with ${skillSummary} (${matchScore}%). Manual review recommended.`,
+        };
+    }
+    return {
+        status: "reject",
+        reason: `Low skill match with ${skillSummary} (${matchScore}%). Recommended for rejection.`,
+    };
+}
+function calculateSkillMatch(userSkills, jobSkills) {
+    if (jobSkills.length === 0)
+        return 0;
+    const normalizedUserSkills = new Set(userSkills.map((skill) => skill.trim().toLowerCase()));
+    const matchedCount = jobSkills.filter((skill) => normalizedUserSkills.has(skill.trim().toLowerCase())).length;
+    return Math.round(40 + (matchedCount / jobSkills.length) * 60);
+}
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -148,12 +207,7 @@ app.use("/uploads", (_req, res) => {
 // File upload setup using memory buffer
 const upload = multer({ storage: multer.memoryStorage() });
 const applyResumeUpload = multer({
-    storage: multer.diskStorage({
-        destination: (_req, _file, callback) => callback(null, uploadsDirectory),
-        filename: (_req, file, callback) => {
-            callback(null, `${randomUUID()}${extname(file.originalname).toLowerCase()}`);
-        },
-    }),
+    storage: multer.memoryStorage(),
     limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: (_req, file, callback) => {
         const extension = extname(file.originalname).toLowerCase();
@@ -255,7 +309,31 @@ const handleAppliedResumeUpload = (req, res, next) => {
         next();
     });
 };
-app.post("/api/apply-job", handleAppliedResumeUpload, (req, res) => {
+app.post("/api/apply-job", handleAppliedResumeUpload, async (req, res) => {
+    if (!req.file) {
+        res.status(400).json({
+            success: false,
+            message: "Valid candidate details, job details, and a PDF or DOCX resume are required.",
+        });
+        return;
+    }
+    const isPdf = extname(req.file.originalname).toLowerCase() === ".pdf";
+    let resumeText = "";
+    if (isPdf) {
+        try {
+            resumeText = await extractValidatedPdfText(req.file.buffer);
+        }
+        catch (error) {
+            if (!(error instanceof InvalidResumeDocumentError)) {
+                console.error("Failed to validate uploaded resume:", error);
+            }
+            res.status(400).json({
+                success: false,
+                message: invalidResumeDocumentMessage,
+            });
+            return;
+        }
+    }
     const jobId = typeof req.body?.jobId === "string" ? req.body.jobId.trim() : "";
     const jobTitle = typeof req.body?.jobTitle === "string" ? req.body.jobTitle.trim() : "";
     const company = typeof req.body?.company === "string" ? req.body.company.trim() : "";
@@ -271,19 +349,42 @@ app.post("/api/apply-job", handleAppliedResumeUpload, (req, res) => {
         company.length > 120 ||
         !candidateName ||
         candidateName.length > 120 ||
-        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
-        !req.file) {
-        if (req.file) {
-            try {
-                unlinkSync(req.file.path);
-            }
-            catch (error) {
-                console.error("Failed to remove invalid uploaded resume:", error);
-            }
-        }
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         res.status(400).json({
             success: false,
             message: "Valid candidate details, job details, and a PDF or DOCX resume are required.",
+        });
+        return;
+    }
+    const suppliedJobSkills = typeof req.body?.jobSkills === "string"
+        ? req.body.jobSkills
+            .split("|")
+            .map((skill) => skill.trim())
+            .filter(Boolean)
+        : [];
+    const matchedJob = jobs.find((job) => String(job.id) === jobId) ??
+        jobs.find((job) => job.title.toLowerCase() === jobTitle.toLowerCase());
+    const requiredSkills = suppliedJobSkills.length
+        ? suppliedJobSkills
+        : (matchedJob?.skills ?? []);
+    const extractedSkills = isPdf ? parseResumeText(resumeText).extractedSkills : [];
+    const matchedSkills = requiredSkills.filter((skill) => extractedSkills.some((extractedSkill) => extractedSkill.toLowerCase() === skill.toLowerCase()));
+    const numericMatchScore = calculateSkillMatch(extractedSkills, requiredSkills);
+    const recommendation = isPdf
+        ? getAiRecommendation(numericMatchScore, matchedSkills)
+        : {
+            status: "review",
+            reason: "The DOCX resume could not be scored automatically. Manual review required.",
+        };
+    const filename = `${randomUUID()}${extname(req.file.originalname).toLowerCase()}`;
+    try {
+        writeFileSync(resolve(uploadsDirectory, filename), req.file.buffer);
+    }
+    catch (error) {
+        console.error("Failed to save uploaded resume:", error);
+        res.status(500).json({
+            success: false,
+            message: "Resume upload failed. Please try again.",
         });
         return;
     }
@@ -294,11 +395,13 @@ app.post("/api/apply-job", handleAppliedResumeUpload, (req, res) => {
         email,
         jobTitle,
         company,
-        matchScore: "—",
+        matchScore: isPdf ? `${numericMatchScore}%` : "—",
+        aiRecommendationStatus: recommendation.status,
+        aiRecommendationReason: recommendation.reason,
         status: "Applied",
         appliedAt: new Date().toISOString(),
         coverLetter,
-        resumeUrl: `${(process.env.PUBLIC_API_BASE_URL || `http://localhost:${PORT}`).replace(/\/+$/, "")}/uploads/${encodeURIComponent(req.file.filename)}`,
+        resumeUrl: `${(process.env.PUBLIC_API_BASE_URL || `http://localhost:${PORT}`).replace(/\/+$/, "")}/uploads/${encodeURIComponent(filename)}`,
     };
     appliedCandidates.unshift(candidate);
     if (/^\d+$/.test(jobId)) {
@@ -308,6 +411,27 @@ app.post("/api/apply-job", handleAppliedResumeUpload, (req, res) => {
 });
 app.get("/api/admin/candidates", (_req, res) => {
     res.json({ success: true, candidates: appliedCandidates });
+});
+app.patch("/api/admin/candidates/:id", (req, res) => {
+    const status = req.body?.status;
+    if (status !== "Shortlisted" && status !== "Rejected") {
+        res.status(400).json({
+            success: false,
+            message: "Candidate status must be Shortlisted or Rejected.",
+        });
+        return;
+    }
+    const candidate = appliedCandidates.find((application) => application.id === req.params.id);
+    if (!candidate) {
+        res.status(404).json({
+            success: false,
+            message: "Candidate application was not found.",
+        });
+        return;
+    }
+    const updatedCandidate = { ...candidate, status };
+    appliedCandidates[appliedCandidates.indexOf(candidate)] = updatedCandidate;
+    res.json({ success: true, candidate: updatedCandidate });
 });
 // =========================
 // JOB SEARCH API
@@ -587,11 +711,10 @@ const analyzeResumeUpload = async (req, res) => {
             return;
         }
         let resumeText = req.file.buffer.toString("utf-8");
-        if (req.file.mimetype === "application/pdf" ||
-            req.file.originalname.toLowerCase().endsWith(".pdf")) {
-            const pdfData = await pdfParse(req.file.buffer);
-            if (pdfData.text)
-                resumeText = pdfData.text;
+        const isPdf = req.file.mimetype === "application/pdf" ||
+            req.file.originalname.toLowerCase().endsWith(".pdf");
+        if (isPdf) {
+            resumeText = await extractValidatedPdfText(req.file.buffer);
         }
         const { extractedSkills } = parseResumeText(resumeText);
         const candidateName = getResumeCandidateName(resumeText, req.file.originalname);
@@ -617,6 +740,13 @@ const analyzeResumeUpload = async (req, res) => {
         });
     }
     catch (error) {
+        if (error instanceof InvalidResumeDocumentError) {
+            res.status(400).json({
+                success: false,
+                message: invalidResumeDocumentMessage,
+            });
+            return;
+        }
         console.error("Resume analysis failed:", error);
         res.status(500).json({
             success: false,

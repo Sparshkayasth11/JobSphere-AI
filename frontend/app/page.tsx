@@ -328,6 +328,8 @@ type Application = {
   jobTitle: string;
   company?: string;
   matchScore: string;
+  aiRecommendationStatus?: "approve" | "review" | "reject";
+  aiRecommendationReason?: string;
   status: "Applied" | "Shortlisted" | "Rejected";
   appliedAt: string;
   extractedSkills?: string[];
@@ -342,14 +344,48 @@ type Application = {
   resumeUrl?: string;
 };
 
+function getCandidateRecommendation(candidate: Application): {
+  status: "approve" | "review" | "reject";
+  reason: string;
+} {
+  const parsedMatchScore = Number.parseFloat(candidate.matchScore);
+  const computedStatus = !Number.isFinite(parsedMatchScore)
+    ? "review"
+    : parsedMatchScore >= 75
+      ? "approve"
+      : parsedMatchScore >= 50
+        ? "review"
+        : "reject";
+  const status =
+    candidate.aiRecommendationStatus ?? computedStatus;
+
+  return {
+    status,
+    reason:
+      candidate.aiRecommendationReason ??
+      (Number.isFinite(parsedMatchScore)
+        ? `ATS match score is ${parsedMatchScore}%. ${
+            status === "approve"
+              ? "Recommended for shortlist."
+              : status === "review"
+                ? "Manual review recommended."
+                : "Recommended for rejection."
+          }`
+        : "No ATS match score is available. Manual review required."),
+  };
+}
+
 function AdminApplicantsTable({
   candidates,
   onShortlist,
-  onReject,
+  onDecision,
 }: {
   candidates: Application[];
   onShortlist: (candidate: Application) => void;
-  onReject: (candidate: Application) => void;
+  onDecision: (
+    candidate: Application,
+    status: "Shortlisted" | "Rejected",
+  ) => void;
 }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<
@@ -418,6 +454,9 @@ function AdminApplicantsTable({
                   Match Score
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 border-b border-zinc-800">
+                  AI Recommendation
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 border-b border-zinc-800">
                   Status
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 border-b border-zinc-800">
@@ -444,6 +483,54 @@ function AdminApplicantsTable({
                   </td>
                   <td className="px-4 py-4 text-sm text-zinc-200 border-b border-zinc-800/60 font-semibold text-emerald-300">
                     {candidate.matchScore}
+                  </td>
+                  <td className="px-4 py-4 text-sm text-zinc-200 border-b border-zinc-800/60">
+                    {(() => {
+                      const recommendation =
+                        getCandidateRecommendation(candidate);
+                      const recommendationStyle =
+                        recommendation.status === "approve"
+                          ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
+                          : recommendation.status === "review"
+                            ? "border-amber-500/20 bg-amber-500/10 text-amber-300"
+                            : "border-rose-500/20 bg-rose-500/10 text-rose-300";
+                      const recommendationLabel =
+                        recommendation.status === "approve"
+                          ? "Approve"
+                          : recommendation.status === "review"
+                            ? "Review"
+                            : "Reject";
+
+                      return (
+                        <div className="flex flex-col items-start gap-2">
+                          <span
+                            title={recommendation.reason}
+                            aria-label={`AI recommendation: ${recommendationLabel}. ${recommendation.reason}`}
+                            className={`cursor-help rounded-full border px-2.5 py-1 text-xs font-medium ${recommendationStyle}`}
+                          >
+                            {recommendationLabel}
+                          </span>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onDecision(candidate, "Shortlisted")
+                              }
+                              className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-500/20"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onDecision(candidate, "Rejected")}
+                              className="rounded-md border border-rose-500/20 bg-rose-500/10 px-2 py-1 text-xs font-medium text-rose-300 transition-colors hover:bg-rose-500/20"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-4 text-sm text-zinc-200 border-b border-zinc-800/60">
                     <span
@@ -501,7 +588,7 @@ function AdminApplicantsTable({
                       </button>
                       <button
                         type="button"
-                        onClick={() => onReject(candidate)}
+                        onClick={() => onDecision(candidate, "Rejected")}
                         className="px-3 py-1 rounded-md text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/30 transition-all"
                       >
                         Reject
@@ -513,7 +600,7 @@ function AdminApplicantsTable({
               {filteredCandidates.length === 0 && (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     className="px-4 py-4 text-sm text-zinc-200 border-b border-zinc-800/60 text-center text-zinc-500"
                   >
                     No candidates match these filters.
@@ -1084,6 +1171,7 @@ const handleGenerateCoverLetter = async (jobTitle: string, company: string) => {
     formData.append("candidateName", applicantName.trim());
     formData.append("email", applicantEmail.trim());
     formData.append("coverLetter", coverLetter);
+    formData.append("jobSkills", applicationJob.skills.join("|"));
     formData.append("resume", applicantResume);
 
     try {
@@ -1143,6 +1231,65 @@ const openInterviewScheduler = (application: Application) => {
   setInterviewLocationUrl(application.interviewLocationUrl ?? "");
   setHrContactNumber(application.hrContactNumber ?? "");
   setSchedulingApplication(application);
+};
+const updateCandidateDecision = async (
+  candidate: Application,
+  status: "Shortlisted" | "Rejected",
+) => {
+  try {
+    let updatedCandidate: Application = { ...candidate, status };
+
+    if (candidate.resumeUrl) {
+      const response = await fetch(
+        `${API_BASE}/api/admin/candidates/${encodeURIComponent(String(candidate.id))}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status }),
+        },
+      );
+      const result: unknown = await response.json();
+      if (
+        !response.ok ||
+        typeof result !== "object" ||
+        result === null ||
+        !("success" in result) ||
+        result.success !== true ||
+        !("candidate" in result) ||
+        !isApplication(result.candidate)
+      ) {
+        const message =
+          typeof result === "object" &&
+          result !== null &&
+          "message" in result &&
+          typeof result.message === "string"
+            ? result.message
+            : "The candidate decision could not be saved.";
+        throw new Error(message);
+      }
+      updatedCandidate = result.candidate;
+    }
+
+    setApplications((current) =>
+      current.map((application) =>
+        application.id === candidate.id
+          ? { ...application, ...updatedCandidate }
+          : application,
+      ),
+    );
+    toast.success(
+      status === "Shortlisted"
+        ? `${candidate.candidateName} approved.`
+        : `${candidate.candidateName} rejected.`,
+    );
+  } catch (error) {
+    console.error("Failed to update candidate decision:", error);
+    toast.error(
+      error instanceof Error
+        ? error.message
+        : "The candidate decision could not be saved.",
+    );
+  }
 };
 const saveInterviewSchedule = async (event: FormEvent<HTMLFormElement>) => {
   event.preventDefault();
@@ -1453,15 +1600,7 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
             <AdminApplicantsTable
               candidates={candidates}
               onShortlist={openInterviewScheduler}
-              onReject={(candidate) =>
-                setApplications((current) =>
-                  current.map((application) =>
-                    application.id === candidate.id
-                      ? { ...application, status: "Rejected" }
-                      : application,
-                  ),
-                )
-              }
+              onDecision={updateCandidateDecision}
             />
           </div>
         </div>

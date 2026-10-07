@@ -39,6 +39,38 @@
 			],
 			"isBackground": false,
 			"problemMatcher": []
+		},
+		{
+			"label": "backend-build",
+			"type": "shell",
+			"command": "cd /d \"C:\\JobSphere-AI\\backend\" && npm run build",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "backend-build2",
+			"type": "shell",
+			"command": "Set-Location \"C:\\JobSphere-AI\\backend\"; npm run build",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "frontend-lint",
+			"type": "shell",
+			"command": "Set-Location \"C:\\JobSphere-AI\\frontend\"; npm run lint",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "frontend-build",
+			"type": "shell",
+			"command": "Set-Location \"C:\\JobSphere-AI\\frontend\"; npm run build",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": []
 		}
 	]
 }
