@@ -5,12 +5,11 @@ import {
   scrypt,
   timingSafeEqual,
 } from "node:crypto";
-import { createInterface } from "node:readline";
-import { connect as connectTls } from "node:tls";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, extname, resolve } from "node:path";
 import type { Express, Request, Response } from "express";
 import multer from "multer";
+import nodemailer from "nodemailer";
 import { fileURLToPath } from "node:url";
 
 const OTP_TTL_MS = 10 * 60 * 1000;
@@ -249,101 +248,35 @@ function requestCandidateId(req: Request): string | null {
   return verifyToken(authorization.slice("Bearer ".length));
 }
 
-function expectSmtpCode(response: string, acceptedCodes: number[]): void {
-  const responseCode = Number.parseInt(response.slice(0, 3), 10);
-  if (!acceptedCodes.includes(responseCode)) {
-    throw new Error(`SMTP server rejected a mail operation (${responseCode}).`);
-  }
-}
-
 async function sendSignupOtpEmail(email: string, otp: string): Promise<void> {
   const host = process.env.SMTP_HOST;
   const port = Number(process.env.SMTP_PORT || 465);
   const user = process.env.SMTP_USER;
   const password = process.env.SMTP_PASS;
   const from = process.env.SMTP_FROM;
-  if (
-    !host ||
-    !Number.isInteger(port) ||
-    port < 1 ||
-    port > 65535 ||
-    !user ||
-    !password ||
-    !from ||
-    !/^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(from)
-  ) {
+  if (!host || !user || !password || !from) {
     throw new Error(
-      "SMTP_HOST, SMTP_USER, SMTP_PASS, and a valid SMTP_FROM must be configured.",
+      "Missing SMTP configuration. Set SMTP_HOST, SMTP_USER, SMTP_PASS, and SMTP_FROM.",
     );
   }
-
-  const socket = connectTls({ host, port, servername: host });
-  socket.setTimeout(15000, () => {
-    socket.destroy(new Error("SMTP connection timed out."));
-  });
-  await new Promise<void>((resolveConnection, rejectConnection) => {
-    socket.once("secureConnect", resolveConnection);
-    socket.once("error", rejectConnection);
-  });
-
-  const lines = createInterface({ input: socket, crlfDelay: Infinity });
-  const smtpLines = lines[Symbol.asyncIterator]();
-  const readResponse = async (): Promise<string> => {
-    const responseLines: string[] = [];
-    while (true) {
-      const { value, done } = await smtpLines.next();
-      if (done) throw new Error("SMTP connection ended unexpectedly.");
-      responseLines.push(value);
-      if (/^\d{3} /.test(value)) return responseLines.join("\r\n");
-      if (!/^\d{3}-/.test(value)) {
-        throw new Error("SMTP server returned an invalid response.");
-      }
-    }
-  };
-  const command = async (
-    value: string,
-    acceptedCodes: number[],
-  ): Promise<void> => {
-    socket.write(`${value}\r\n`);
-    expectSmtpCode(await readResponse(), acceptedCodes);
-  };
-
-  try {
-    expectSmtpCode(await readResponse(), [220]);
-    await command("EHLO jobsphere-ai.local", [250]);
-    await command("AUTH LOGIN", [334]);
-    await command(Buffer.from(user).toString("base64"), [334]);
-    await command(Buffer.from(password).toString("base64"), [235]);
-    await command(`MAIL FROM:<${from}>`, [250]);
-    await command(`RCPT TO:<${email}>`, [250, 251]);
-    await command("DATA", [354]);
-
-    const encodedBody = Buffer.from(
-      `<div style="font-family:Arial,sans-serif"><h2>Verify your JobSphere AI account</h2><p>Your one-time verification code is <strong>${otp}</strong>.</p><p>This code expires in 10 minutes. If you did not request it, ignore this email.</p></div>`,
-    )
-      .toString("base64")
-      .match(/.{1,76}/g)
-      ?.join("\r\n");
-    if (!encodedBody) throw new Error("Could not prepare the OTP email.");
-    const message = [
-      `From: JobSphere AI <${from}>`,
-      `To: ${email}`,
-      "Subject: Your JobSphere AI verification code",
-      "MIME-Version: 1.0",
-      'Content-Type: text/html; charset="UTF-8"',
-      "Content-Transfer-Encoding: base64",
-      "",
-      encodedBody,
-      ".",
-      "",
-    ].join("\r\n");
-    socket.write(message);
-    expectSmtpCode(await readResponse(), [250]);
-    await command("QUIT", [221]);
-  } finally {
-    lines.close();
-    socket.end();
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error("SMTP_PORT must be a valid port number.");
   }
+
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass: password },
+  });
+
+  await transporter.sendMail({
+    from: `JobSphere AI <${from}>`,
+    to: email,
+    subject: "Your JobSphere AI verification code",
+    text: `Your JobSphere AI verification code is ${otp}. It expires in 10 minutes. If you did not request it, ignore this email.`,
+    html: `<div style="font-family:Arial,sans-serif"><h2>Verify your JobSphere AI account</h2><p>Your one-time verification code is <strong>${otp}</strong>.</p><p>This code expires in 10 minutes. If you did not request it, ignore this email.</p></div>`,
+  });
 }
 
 function isProfileImage(file: Express.Multer.File): boolean {
@@ -450,16 +383,7 @@ export function registerAuthRoutes(
 
         const pendingPasswordHash = await hashPassword(password);
         const otp = String(randomInt(100000, 1000000));
-        let deliveryMode: "email" | "console" = "email";
-        try {
-          await sendSignupOtpEmail(normalizedEmail, otp);
-        } catch (error) {
-          deliveryMode = "console";
-          console.warn(
-            `SMTP delivery unavailable for ${normalizedEmail}; use signup OTP ${otp} before it expires.`,
-            error,
-          );
-        }
+        await sendSignupOtpEmail(normalizedEmail, otp);
         pendingSignups.set(normalizedEmail, {
           id: randomUUID(),
           name: name.trim(),
@@ -475,24 +399,13 @@ export function registerAuthRoutes(
           email: normalizedEmail,
           expiresInSeconds: OTP_TTL_MS / 1000,
           requiresOtpVerification: true,
-          deliveryMode,
-          ...(deliveryMode === "console" &&
-          process.env.NODE_ENV !== "production"
-            ? { otp }
-            : {}),
-          message:
-            deliveryMode === "email"
-              ? "A verification code was sent to your email. It expires in 10 minutes."
-              : "Email delivery is unavailable. Use the OTP shown in the backend console to verify your account.",
+          message: "A verification code was sent to your email. It expires in 10 minutes.",
         });
       } catch (error) {
         console.error("Signup OTP delivery failed:", error);
-        res.status(503).json({
+        res.status(500).json({
           success: false,
-          message:
-            error instanceof Error
-              ? error.message
-              : "Unable to send the verification email. Please try again.",
+          message: error instanceof Error ? error.message : String(error),
         });
       }
     },
