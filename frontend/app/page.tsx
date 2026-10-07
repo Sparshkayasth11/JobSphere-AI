@@ -880,6 +880,7 @@ const [adminPassword, setAdminPassword] = useState("");
 const [adminAuthKey, setAdminAuthKey] = useState("");
 const [adminLoginError, setAdminLoginError] = useState("");
 const [adminLoginLoading, setAdminLoginLoading] = useState(false);
+const [showCandidateAuthModal, setShowCandidateAuthModal] = useState(false);
 const [applications, setApplications] = useState<Application[]>([]);
 const [adminTab, setAdminTab] = useState<"applicants" | "registered">("applicants");
 const [registeredCandidates, setRegisteredCandidates] = useState<
@@ -933,7 +934,62 @@ const [selectedInterviewApplication, setSelectedInterviewApplication] =
   const [interviewVocabulary, setInterviewVocabulary] = useState<string[]>([]);
   const [interviewProTip, setInterviewProTip] = useState("");
  const [polishingInterviewAnswer, setPolishingInterviewAnswer] = useState(false);
+
+ const requireCandidateAuth = () => {
+   const token = localStorage.getItem("authToken");
+   if (token) return true;
+   toast.error("Please login or create an account to apply for jobs.");
+   setShowCandidateAuthModal(true);
+   return false;
+ };
+
+ const openResumeUpload = () => {
+   if (requireCandidateAuth()) setIsModalOpen(true);
+ };
+
  useEffect(() => {
+   const storedAdminKey = localStorage.getItem("adminKey");
+   if (!storedAdminKey) return;
+
+   let cancelled = false;
+   const restoreAdminSession = async () => {
+     try {
+       const response = await fetch(`${API_BASE}/api/admin/users`, {
+         headers: { "x-admin-key": storedAdminKey },
+       });
+       const result: unknown = await response.json();
+       if (
+         !response.ok ||
+         typeof result !== "object" ||
+         result === null ||
+         !("success" in result) ||
+         result.success !== true ||
+         !("users" in result) ||
+         !Array.isArray(result.users) ||
+         !result.users.every(isRegisteredCandidate)
+       ) {
+         if (response.status === 401 || response.status === 503) {
+           localStorage.removeItem("adminKey");
+           if (!cancelled) setAdminAuthKey("");
+         }
+         return;
+       }
+       if (!cancelled) {
+         setAdminAuthKey(storedAdminKey);
+         setRegisteredCandidates(result.users);
+         setIsAdminView(true);
+       }
+     } catch (error) {
+       console.error("Failed to restore the admin session:", error);
+     }
+   };
+   void restoreAdminSession();
+   return () => {
+     cancelled = true;
+   };
+ }, []);
+
+  useEffect(() => {
   try {
     const savedJobIds = localStorage.getItem("appliedJobIds");
     const savedApplications = localStorage.getItem("applications");
@@ -1040,6 +1096,7 @@ useEffect(() => {
 }, []);
 
 const fetchSalaryBenchmark = async (job: Job, experienceYears: number) => {
+  if (!requireCandidateAuth()) return;
   salaryBenchmarkRequest.current?.abort();
   const controller = new AbortController();
   salaryBenchmarkRequest.current = controller;
@@ -1107,6 +1164,7 @@ const handleCloseJobDetails = () => {
 };
 
 const handleGenerateCoverLetter = async (jobTitle: string, company: string) => {
+    if (!requireCandidateAuth()) return;
     setShowCLModal(true);
     setIsGeneratingCL(true);
     try {
@@ -1131,6 +1189,7 @@ const handleGenerateCoverLetter = async (jobTitle: string, company: string) => {
   };
 
   const handlePrepareWithAI = (job: Job) => {
+    if (!requireCandidateAuth()) return;
     setInterviewPrepJob(job);
     setActivePrepTab("mock");
     setRoughInterviewAnswer("");
@@ -1278,6 +1337,7 @@ const handleGenerateCoverLetter = async (jobTitle: string, company: string) => {
 
   const submitJobApplication = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!requireCandidateAuth()) return;
     if (!applicationJob || !applicantResume || submittingApplication) return;
     if (appliedJobIds.includes(applicationJob.id)) {
       toast.error("You have already applied for this job.");
@@ -1523,6 +1583,10 @@ const getMatchScore = (jobSkills: string[]) => {
   return calculateSkillMatch(userSkills, jobSkills);
 };
 const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  if (!requireCandidateAuth()) {
+    e.target.value = "";
+    return;
+  }
   const file = e.target.files?.[0];
   if (!file) return;
 
@@ -1681,7 +1745,10 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         typeof result !== "object" ||
         result === null ||
         !("success" in result) ||
-        result.success !== true
+        result.success !== true ||
+        !("users" in result) ||
+        !Array.isArray(result.users) ||
+        !result.users.every(isRegisteredCandidate)
       ) {
         const message =
           typeof result === "object" &&
@@ -1692,7 +1759,9 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
             : "Admin authentication failed.";
         throw new Error(message);
       }
-      setAdminAuthKey(adminPassword);
+      setAdminAuthKey(adminPassword.trim());
+      localStorage.setItem("adminKey", adminPassword.trim());
+      setRegisteredCandidates(result.users);
       setAdminPassword("");
       setIsAdminView(true);
       setShowAdminModal(false);
@@ -1757,6 +1826,7 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
               <button
                 type="button"
                 onClick={() => {
+                  localStorage.removeItem("adminKey");
                   setIsAdminView(false);
                   setAdminAuthKey("");
                   setAdminTab("applicants");
@@ -1764,7 +1834,7 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                 }}
                 className="rounded-lg bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-500"
               >
-                Exit Admin View
+                Logout
               </button>
             </div>
           </header>
@@ -1962,7 +2032,7 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
             <div className="flex shrink-0 items-center gap-2">
               <button
                 className="rounded-lg px-3 py-2 text-sm font-bold text-white transition-colors hover:bg-zinc-800"
-                onClick={() => setIsModalOpen(true)}
+                onClick={openResumeUpload}
               >
                 Upload Resume
               </button>
@@ -2035,7 +2105,7 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
               type="button"
               onClick={() => {
                 setIsMobileMenuOpen(false);
-                setIsModalOpen(true);
+                openResumeUpload();
               }}
               className="rounded-lg border border-zinc-700 px-4 py-2.5 text-left text-sm font-medium text-white transition-colors hover:bg-zinc-800"
             >
@@ -2536,7 +2606,7 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
             prepare stronger, more focused applications.
             </p>
 
-            <button className="ai-button" onClick={() => setIsModalOpen(true)}>
+            <button className="ai-button" onClick={openResumeUpload}>
               <SparkIcon />
               Upload Resume for AI Match
               <ArrowIcon />
@@ -2847,6 +2917,44 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
               />
             </label>
           </div>
+        </div>
+      )}
+      {showCandidateAuthModal && (
+        <div className="fixed inset-0 z-[1400] grid place-items-center bg-black/80 p-5 backdrop-blur-sm">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="candidate-auth-title"
+            className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-6 text-white shadow-2xl"
+          >
+            <h2 id="candidate-auth-title" className="text-xl font-bold">
+              Sign in to continue
+            </h2>
+            <p className="mt-2 text-sm text-zinc-400">
+              Please login or create an account to apply for jobs.
+            </p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <a
+                href="/login"
+                className="rounded-lg bg-emerald-400 px-4 py-3 text-center text-sm font-semibold text-zinc-950 hover:bg-emerald-300"
+              >
+                Log in
+              </a>
+              <a
+                href="/signup"
+                className="rounded-lg border border-zinc-700 px-4 py-3 text-center text-sm font-semibold text-zinc-100 hover:bg-zinc-800"
+              >
+                Create account
+              </a>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowCandidateAuthModal(false)}
+              className="mt-4 w-full rounded-lg px-4 py-2 text-sm text-zinc-400 hover:text-white"
+            >
+              Continue browsing
+            </button>
+          </section>
         </div>
       )}
       {/* Admin Password Modal */}
@@ -3702,6 +3810,7 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
           <div style={{ display: "flex", gap: "12px", marginTop: "28px" }}>
             <button
               onClick={() => {
+                if (!requireCandidateAuth()) return;
                 setApplicantName("");
                 setApplicantEmail("");
                 setApplicantResume(null);
