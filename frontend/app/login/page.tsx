@@ -64,6 +64,8 @@ export default function LoginPage() {
     event.preventDefault();
     setResetError("");
     setResetMessage("");
+    setDevOtp("");
+    setResetOtp("");
     setResetLoading(true);
     try {
       const response = await fetch(`${API_BASE}/api/auth/forgot-password`, {
@@ -79,9 +81,11 @@ export default function LoginPage() {
       if (!response.ok || data.success !== true) {
         throw new Error(data.message || "Could not send a reset code.");
       }
-      if (data.devOtp) {
+      if (typeof data.devOtp === "string" && /^\d{6}$/.test(data.devOtp)) {
         setDevOtp(data.devOtp);
         setResetOtp(data.devOtp);
+      } else {
+        setResetOtp("");
       }
       setResetStep(2);
       setResetMessage(data.message || "Check the email registered to your account for a reset code.");
@@ -285,6 +289,11 @@ export default function LoginPage() {
               </form>
             ) : (
               <form onSubmit={submitPasswordReset} className="mt-5 grid gap-4">
+                {devOtp && (
+                  <p className="-mt-2 rounded-md bg-amber-950/60 px-3 py-2 text-sm text-amber-200">
+                    Dev OTP: <span className="font-mono font-bold">{devOtp}</span>
+                  </p>
+                )}
                 <label className="grid gap-1.5 text-sm text-zinc-300">
                   Verification code
                   <input
@@ -298,11 +307,6 @@ export default function LoginPage() {
                     className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 tracking-[0.3em] outline-none focus:border-emerald-500"
                   />
                 </label>
-                {devOtp && (
-                  <p className="rounded-md bg-amber-950/60 px-3 py-2 text-sm text-amber-200">
-                    Dev OTP: <span className="font-mono font-bold">{devOtp}</span>
-                  </p>
-                )}
                 {resetMessage && (
                   <p role="status" className="rounded-lg bg-emerald-950/60 p-3 text-sm text-emerald-200">
                     {resetMessage}

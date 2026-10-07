@@ -564,7 +564,7 @@ export function registerAuthRoutes(app, uploadsDirectory) {
                 expiresAt: Date.now() + OTP_TTL_MS,
                 attempts: 0,
             });
-            let devOtp;
+            let devOtp = process.env.NODE_ENV === "production" ? undefined : otp;
             try {
                 await sendSignupOtpEmail(candidate.email, otp);
             }
@@ -579,7 +579,6 @@ export function registerAuthRoutes(app, uploadsDirectory) {
                     return;
                 }
                 console.warn(`Development password reset OTP: ${otp}`);
-                devOtp = otp;
             }
             res.status(200).json({
                 success: true,
