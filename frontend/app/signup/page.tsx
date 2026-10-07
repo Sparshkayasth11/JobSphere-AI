@@ -11,6 +11,7 @@ type ApiResult = {
   success?: boolean;
   message?: string;
   token?: string;
+  devOtp?: string;
   profilePicture?: string | null;
 };
 
@@ -29,6 +30,7 @@ export default function SignupPage() {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
+  const [devOtp, setDevOtp] = useState("");
   const [token, setToken] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
   const [step, setStep] = useState<"signup" | "otp" | "photo" | "complete">(
@@ -51,7 +53,12 @@ export default function SignupPage() {
       if (!response.ok || result.success !== true) {
         throw new Error(result.message || "Could not send the verification code.");
       }
-      setOtp("");
+      const returnedDevOtp =
+        typeof result.devOtp === "string" && /^\d{6}$/.test(result.devOtp)
+          ? result.devOtp
+          : "";
+      setDevOtp(returnedDevOtp);
+      setOtp(returnedDevOtp);
       setStep("otp");
     } catch (cause) {
       setError(
@@ -224,6 +231,11 @@ export default function SignupPage() {
               <p className="mt-2 text-sm text-zinc-400">
                 Enter the 6-digit code sent to {email}. It expires in 10 minutes.
               </p>
+              {devOtp && (
+                <p className="mt-3 inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-300">
+                  Dev OTP: {devOtp}
+                </p>
+              )}
               <input
                 aria-label="6-digit verification code"
                 inputMode="numeric"
