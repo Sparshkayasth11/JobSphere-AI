@@ -298,9 +298,9 @@ export default function LoginPage() {
             ) : (
               <form onSubmit={submitPasswordReset} className="mt-5 grid gap-4">
                 {devOtp && (
-                  <p className="-mt-2 rounded-md bg-amber-950/60 px-3 py-2 text-sm text-amber-200">
+                  <div className="mb-2 inline-block rounded border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-500">
                     Dev OTP: <span className="font-mono font-bold">{devOtp}</span>
-                  </p>
+                  </div>
                 )}
                 <label className="grid gap-1.5 text-sm text-zinc-300">
                   Verification code
