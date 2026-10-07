@@ -13,6 +13,7 @@ type ApiResult = {
   token?: string;
   devOtp?: string;
   profilePicture?: string | null;
+  candidate?: unknown;
 };
 
 async function readApiResult(response: Response): Promise<ApiResult> {
@@ -84,6 +85,14 @@ export default function SignupPage() {
         throw new Error(result.message || "Could not verify the code.");
       }
       setToken(result.token);
+      localStorage.setItem("authToken", result.token);
+      if (result.candidate) {
+        localStorage.setItem(
+          "candidateProfile",
+          JSON.stringify(result.candidate),
+        );
+      }
+      window.dispatchEvent(new Event("jobSphereAuthChanged"));
       setStep("photo");
     } catch (cause) {
       setError(
@@ -113,6 +122,13 @@ export default function SignupPage() {
       const result = await readApiResult(response);
       if (!response.ok || result.success !== true) {
         throw new Error(result.message || "Could not upload the profile photo.");
+      }
+      if (result.candidate) {
+        localStorage.setItem(
+          "candidateProfile",
+          JSON.stringify(result.candidate),
+        );
+        window.dispatchEvent(new Event("jobSphereAuthChanged"));
       }
       setStep("complete");
     } catch (cause) {

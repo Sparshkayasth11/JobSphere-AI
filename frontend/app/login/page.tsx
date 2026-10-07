@@ -43,6 +43,7 @@ export default function LoginPage() {
       if (data.candidate) {
         localStorage.setItem("candidateProfile", JSON.stringify(data.candidate));
       }
+      window.dispatchEvent(new Event("jobSphereAuthChanged"));
       router.push("/");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not sign in.");

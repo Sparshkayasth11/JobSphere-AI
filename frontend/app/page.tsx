@@ -354,6 +354,39 @@ type RegisteredCandidate = {
   joinedAt: string;
 };
 
+type CandidateProfile = {
+  name?: string;
+  email?: string;
+  profilePicture?: string | null;
+};
+
+function readCandidateProfile(): CandidateProfile | null {
+  const storedProfile = localStorage.getItem("candidateProfile");
+  if (!storedProfile) return null;
+  try {
+    const parsed: unknown = JSON.parse(storedProfile);
+    if (typeof parsed !== "object" || parsed === null) return null;
+    const profile: CandidateProfile = {};
+    if ("name" in parsed && typeof parsed.name === "string") {
+      profile.name = parsed.name;
+    }
+    if ("email" in parsed && typeof parsed.email === "string") {
+      profile.email = parsed.email;
+    }
+    if (
+      "profilePicture" in parsed &&
+      (typeof parsed.profilePicture === "string" ||
+        parsed.profilePicture === null)
+    ) {
+      profile.profilePicture = parsed.profilePicture;
+    }
+    return profile;
+  } catch (error) {
+    console.error("Could not read the saved candidate profile:", error);
+    return null;
+  }
+}
+
 function isRegisteredCandidate(value: unknown): value is RegisteredCandidate {
   return (
     typeof value === "object" &&
@@ -881,6 +914,9 @@ const [adminAuthKey, setAdminAuthKey] = useState("");
 const [adminLoginError, setAdminLoginError] = useState("");
 const [adminLoginLoading, setAdminLoginLoading] = useState(false);
 const [showCandidateAuthModal, setShowCandidateAuthModal] = useState(false);
+const [candidateToken, setCandidateToken] = useState("");
+const [candidateProfile, setCandidateProfile] =
+  useState<CandidateProfile | null>(null);
 const [applications, setApplications] = useState<Application[]>([]);
 const [adminTab, setAdminTab] = useState<"applicants" | "registered">("applicants");
 const [registeredCandidates, setRegisteredCandidates] = useState<
@@ -937,7 +973,11 @@ const [selectedInterviewApplication, setSelectedInterviewApplication] =
 
  const requireCandidateAuth = () => {
    const token = localStorage.getItem("authToken");
-   if (token) return true;
+   if (token) {
+     setCandidateToken(token);
+     setCandidateProfile(readCandidateProfile());
+     return true;
+   }
    toast.error("Please login or create an account to apply for jobs.");
    setShowCandidateAuthModal(true);
    return false;
@@ -947,9 +987,32 @@ const [selectedInterviewApplication, setSelectedInterviewApplication] =
    if (requireCandidateAuth()) setIsModalOpen(true);
  };
 
+ const logoutCandidate = () => {
+   localStorage.removeItem("authToken");
+   localStorage.removeItem("candidateProfile");
+   setCandidateToken("");
+   setCandidateProfile(null);
+   window.dispatchEvent(new Event("jobSphereAuthChanged"));
+   toast.success("You have been logged out.");
+ };
+
  useEffect(() => {
+   const refreshCandidateAuth = () => {
+     const token = localStorage.getItem("authToken") || "";
+     setCandidateToken(token);
+     setCandidateProfile(token ? readCandidateProfile() : null);
+   };
+   refreshCandidateAuth();
+   window.addEventListener("jobSphereAuthChanged", refreshCandidateAuth);
+   window.addEventListener("storage", refreshCandidateAuth);
+
    const storedAdminKey = localStorage.getItem("adminKey");
-   if (!storedAdminKey) return;
+   if (!storedAdminKey) {
+     return () => {
+       window.removeEventListener("jobSphereAuthChanged", refreshCandidateAuth);
+       window.removeEventListener("storage", refreshCandidateAuth);
+     };
+   }
 
    let cancelled = false;
    const restoreAdminSession = async () => {
@@ -986,6 +1049,8 @@ const [selectedInterviewApplication, setSelectedInterviewApplication] =
    void restoreAdminSession();
    return () => {
      cancelled = true;
+     window.removeEventListener("jobSphereAuthChanged", refreshCandidateAuth);
+     window.removeEventListener("storage", refreshCandidateAuth);
    };
  }, []);
 
@@ -2018,7 +2083,14 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
 
           <div className="hidden items-center gap-8 text-sm text-zinc-300 md:flex">
             <a href="#jobs">Find Jobs</a>
-            <a href="#ai">AI Assistant</a>
+            <a
+              href="#ai"
+              onClick={(event) => {
+                if (!requireCandidateAuth()) event.preventDefault();
+              }}
+            >
+              AI Assistant
+            </a>
             <a href="#how">How It Works</a>
             <a href="#about">About</a>
           </div>
@@ -2036,15 +2108,32 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
               >
                 Upload Resume
               </button>
-              <a
-                href="/login"
-                className="rounded-lg px-3 py-2 text-sm font-bold text-white transition-colors hover:bg-zinc-800"
-              >
-                Log in
-              </a>
-              <a className="rounded-lg bg-lime-300 px-4 py-2 text-sm font-bold text-zinc-950 transition-colors hover:bg-lime-200" href="/signup">
-                Get Started
-              </a>
+              {candidateToken ? (
+                <>
+                  <span className="max-w-36 truncate px-2 text-sm font-medium text-emerald-300">
+                    {candidateProfile?.name || candidateProfile?.email || "Candidate"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={logoutCandidate}
+                    className="rounded-lg border border-zinc-700 px-3 py-2 text-sm font-bold text-white transition-colors hover:bg-zinc-800"
+                  >
+                    Logout
+                  </button>
+                </>
+              ) : (
+                <>
+                  <a
+                    href="/login"
+                    className="rounded-lg px-3 py-2 text-sm font-bold text-white transition-colors hover:bg-zinc-800"
+                  >
+                    Log in
+                  </a>
+                  <a className="rounded-lg bg-lime-300 px-4 py-2 text-sm font-bold text-zinc-950 transition-colors hover:bg-lime-200" href="/signup">
+                    Get Started
+                  </a>
+                </>
+              )}
             </div>
             <button
               type="button"
@@ -2075,7 +2164,10 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
             </a>
             <a
               href="#ai"
-              onClick={() => setIsMobileMenuOpen(false)}
+              onClick={(event) => {
+                setIsMobileMenuOpen(false);
+                if (!requireCandidateAuth()) event.preventDefault();
+              }}
               className="text-sm text-zinc-200 hover:text-white"
             >
               AI Assistant
@@ -2087,20 +2179,40 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
             >
               ✨ Pro Plans
             </a>
-            <a
-              href="/login"
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="rounded-lg border border-zinc-700 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800"
-            >
-              Log in
-            </a>
-            <a
-              href="/signup"
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="rounded-lg bg-lime-300 px-4 py-2.5 text-center text-sm font-semibold text-zinc-950"
-            >
-              Get Started
-            </a>
+            {candidateToken ? (
+              <>
+                <span className="text-sm font-medium text-emerald-300">
+                  {candidateProfile?.name || candidateProfile?.email || "Candidate"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    logoutCandidate();
+                  }}
+                  className="rounded-lg border border-zinc-700 px-4 py-2.5 text-left text-sm font-medium text-white transition-colors hover:bg-zinc-800"
+                >
+                  Logout
+                </button>
+              </>
+            ) : (
+              <>
+                <a
+                  href="/login"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="rounded-lg border border-zinc-700 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800"
+                >
+                  Log in
+                </a>
+                <a
+                  href="/signup"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="rounded-lg bg-lime-300 px-4 py-2.5 text-center text-sm font-semibold text-zinc-950"
+                >
+                  Get Started
+                </a>
+              </>
+            )}
             <button
               type="button"
               onClick={() => {

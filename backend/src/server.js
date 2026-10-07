@@ -101,9 +101,6 @@ function getRecommendedRoles(skills) {
     }
     return roles.length > 0 ? [...new Set(roles)].slice(0, 4) : ["Software Developer"];
 }
-const invalidResumeDocumentMessage = "Invalid document. Please upload a valid resume containing work history and skills.";
-class InvalidResumeDocumentError extends Error {
-}
 function isValidResumeContent(text) {
     const normalizedText = text.toLowerCase();
     const hasSkills = /\bskills?\b/.test(normalizedText);
@@ -118,19 +115,32 @@ function isValidResumeContent(text) {
         /(?:\+?\d[\d\s().-]{7,}\d)/.test(text);
     return hasSkills && resumeSectionCount >= 2 && hasContactDetails;
 }
-async function extractValidatedPdfText(buffer) {
-    let text;
+function getPdfFallbackText(buffer, originalFilename, extractedText = "") {
+    const filenameText = originalFilename
+        .replace(/\.pdf$/i, "")
+        .replace(/[_-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    const basicText = (extractedText || buffer.toString("latin1"))
+        .replace(/[^\x20-\x7e\r\n\t]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 5000);
+    return [filenameText, basicText].filter(Boolean).join("\n") || "Resume";
+}
+async function extractValidatedPdfText(buffer, originalFilename) {
     try {
         const pdfData = await pdfParse(buffer);
-        text = pdfData.text;
+        const text = pdfData.text.trim();
+        if (isValidResumeContent(text))
+            return text;
+        console.warn(`PDF text from "${originalFilename}" was minimal or did not meet resume checks; using extracted text and filename fallback.`);
+        return getPdfFallbackText(buffer, originalFilename, text);
     }
-    catch {
-        throw new InvalidResumeDocumentError(invalidResumeDocumentMessage);
+    catch (error) {
+        console.warn(`Could not parse PDF "${originalFilename}"; using filename/text fallback:`, error);
+        return getPdfFallbackText(buffer, originalFilename);
     }
-    if (!isValidResumeContent(text)) {
-        throw new InvalidResumeDocumentError(invalidResumeDocumentMessage);
-    }
-    return text;
 }
 function getAiRecommendation(matchScore, matchedSkills) {
     const skillSummary = matchedSkills.length > 0
@@ -323,15 +333,13 @@ app.post("/api/apply-job", handleAppliedResumeUpload, async (req, res) => {
     let resumeText = "";
     if (isPdf) {
         try {
-            resumeText = await extractValidatedPdfText(req.file.buffer);
+            resumeText = await extractValidatedPdfText(req.file.buffer, req.file.originalname);
         }
         catch (error) {
-            if (!(error instanceof InvalidResumeDocumentError)) {
-                console.error("Failed to validate uploaded resume:", error);
-            }
-            res.status(400).json({
+            console.error("Failed to prepare uploaded resume:", error);
+            res.status(500).json({
                 success: false,
-                message: invalidResumeDocumentMessage,
+                message: "Resume could not be processed. Please try another file.",
             });
             return;
         }
@@ -719,7 +727,7 @@ const analyzeResumeUpload = async (req, res) => {
         const isPdf = req.file.mimetype === "application/pdf" ||
             req.file.originalname.toLowerCase().endsWith(".pdf");
         if (isPdf) {
-            resumeText = await extractValidatedPdfText(req.file.buffer);
+            resumeText = await extractValidatedPdfText(req.file.buffer, req.file.originalname);
         }
         const { extractedSkills } = parseResumeText(resumeText);
         const candidateName = getResumeCandidateName(resumeText, req.file.originalname);
@@ -745,13 +753,6 @@ const analyzeResumeUpload = async (req, res) => {
         });
     }
     catch (error) {
-        if (error instanceof InvalidResumeDocumentError) {
-            res.status(400).json({
-                success: false,
-                message: invalidResumeDocumentMessage,
-            });
-            return;
-        }
         console.error("Resume analysis failed:", error);
         res.status(500).json({
             success: false,

@@ -210,11 +210,6 @@ function getRecommendedRoles(skills: string[]): string[] {
   return roles.length > 0 ? [...new Set(roles)].slice(0, 4) : ["Software Developer"];
 }
 
-const invalidResumeDocumentMessage =
-  "Invalid document. Please upload a valid resume containing work history and skills.";
-
-class InvalidResumeDocumentError extends Error {}
-
 function isValidResumeContent(text: string): boolean {
   const normalizedText = text.toLowerCase();
   const hasSkills = /\bskills?\b/.test(normalizedText);
@@ -232,19 +227,43 @@ function isValidResumeContent(text: string): boolean {
   return hasSkills && resumeSectionCount >= 2 && hasContactDetails;
 }
 
-async function extractValidatedPdfText(buffer: Buffer): Promise<string> {
-  let text: string;
+function getPdfFallbackText(
+  buffer: Buffer,
+  originalFilename: string,
+  extractedText = "",
+): string {
+  const filenameText = originalFilename
+    .replace(/\.pdf$/i, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const basicText = (extractedText || buffer.toString("latin1"))
+    .replace(/[^\x20-\x7e\r\n\t]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 5000);
+  return [filenameText, basicText].filter(Boolean).join("\n") || "Resume";
+}
+
+async function extractValidatedPdfText(
+  buffer: Buffer,
+  originalFilename: string,
+): Promise<string> {
   try {
     const pdfData = await pdfParse(buffer);
-    text = pdfData.text;
-  } catch {
-    throw new InvalidResumeDocumentError(invalidResumeDocumentMessage);
+    const text = pdfData.text.trim();
+    if (isValidResumeContent(text)) return text;
+    console.warn(
+      `PDF text from "${originalFilename}" was minimal or did not meet resume checks; using extracted text and filename fallback.`,
+    );
+    return getPdfFallbackText(buffer, originalFilename, text);
+  } catch (error) {
+    console.warn(
+      `Could not parse PDF "${originalFilename}"; using filename/text fallback:`,
+      error,
+    );
+    return getPdfFallbackText(buffer, originalFilename);
   }
-
-  if (!isValidResumeContent(text)) {
-    throw new InvalidResumeDocumentError(invalidResumeDocumentMessage);
-  }
-  return text;
 }
 
 function getAiRecommendation(
@@ -489,14 +508,15 @@ app.post(
     let resumeText = "";
     if (isPdf) {
       try {
-        resumeText = await extractValidatedPdfText(req.file.buffer);
+        resumeText = await extractValidatedPdfText(
+          req.file.buffer,
+          req.file.originalname,
+        );
       } catch (error: unknown) {
-        if (!(error instanceof InvalidResumeDocumentError)) {
-          console.error("Failed to validate uploaded resume:", error);
-        }
-        res.status(400).json({
+        console.error("Failed to prepare uploaded resume:", error);
+        res.status(500).json({
           success: false,
-          message: invalidResumeDocumentMessage,
+          message: "Resume could not be processed. Please try another file.",
         });
         return;
       }
@@ -1033,7 +1053,10 @@ const analyzeResumeUpload = async (
       req.file.mimetype === "application/pdf" ||
       req.file.originalname.toLowerCase().endsWith(".pdf");
     if (isPdf) {
-      resumeText = await extractValidatedPdfText(req.file.buffer);
+      resumeText = await extractValidatedPdfText(
+        req.file.buffer,
+        req.file.originalname,
+      );
     }
 
     const { extractedSkills } = parseResumeText(resumeText);
@@ -1063,13 +1086,6 @@ const analyzeResumeUpload = async (
       jobs: matchedJobs,
     });
   } catch (error: unknown) {
-    if (error instanceof InvalidResumeDocumentError) {
-      res.status(400).json({
-        success: false,
-        message: invalidResumeDocumentMessage,
-      });
-      return;
-    }
     console.error("Resume analysis failed:", error);
     res.status(500).json({
       success: false,
