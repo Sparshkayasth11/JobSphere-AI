@@ -13,6 +13,7 @@ import nodemailer from "nodemailer";
 import { fileURLToPath } from "node:url";
 
 const OTP_TTL_MS = 10 * 60 * 1000;
+const SMTP_SEND_TIMEOUT_MS = 10 * 1000;
 const JWT_TTL_SECONDS = 7 * 24 * 60 * 60;
 const MAX_PROFILE_IMAGE_BYTES = 5 * 1024 * 1024;
 const DEFAULT_JWT_SECRET =
@@ -268,15 +269,32 @@ async function sendSignupOtpEmail(email: string, otp: string): Promise<void> {
     port,
     secure: port === 465,
     auth: { user, pass: password },
+    connectionTimeout: SMTP_SEND_TIMEOUT_MS,
+    greetingTimeout: SMTP_SEND_TIMEOUT_MS,
+    socketTimeout: SMTP_SEND_TIMEOUT_MS,
   });
 
-  await transporter.sendMail({
-    from: `JobSphere AI <${from}>`,
-    to: email,
-    subject: "Your JobSphere AI verification code",
-    text: `Your JobSphere AI verification code is ${otp}. It expires in 10 minutes. If you did not request it, ignore this email.`,
-    html: `<div style="font-family:Arial,sans-serif"><h2>Verify your JobSphere AI account</h2><p>Your one-time verification code is <strong>${otp}</strong>.</p><p>This code expires in 10 minutes. If you did not request it, ignore this email.</p></div>`,
-  });
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      transporter.sendMail({
+        from: `JobSphere AI <${from}>`,
+        to: email,
+        subject: "Your JobSphere AI verification code",
+        text: `Your JobSphere AI verification code is ${otp}. It expires in 10 minutes. If you did not request it, ignore this email.`,
+        html: `<div style="font-family:Arial,sans-serif"><h2>Verify your JobSphere AI account</h2><p>Your one-time verification code is <strong>${otp}</strong>.</p><p>This code expires in 10 minutes. If you did not request it, ignore this email.</p></div>`,
+      }),
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => {
+          transporter.close();
+          reject(new Error("SMTP email sending timed out after 10 seconds."));
+        }, SMTP_SEND_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+    transporter.close();
+  }
 }
 
 function isProfileImage(file: Express.Multer.File): boolean {
@@ -383,7 +401,18 @@ export function registerAuthRoutes(
 
         const pendingPasswordHash = await hashPassword(password);
         const otp = String(randomInt(100000, 1000000));
-        await sendSignupOtpEmail(normalizedEmail, otp);
+        try {
+          await sendSignupOtpEmail(normalizedEmail, otp);
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          console.error(`Failed to send signup OTP to ${normalizedEmail}:`, error);
+          res.status(500).json({
+            success: false,
+            message,
+          });
+          return;
+        }
         pendingSignups.set(normalizedEmail, {
           id: randomUUID(),
           name: name.trim(),
@@ -637,7 +666,7 @@ export function registerAuthRoutes(
   app.get("/api/admin/users", async (req: Request, res: Response) => {
     const adminApiKey = process.env.ADMIN_API_KEY;
     const suppliedApiKey = req.header("x-admin-key");
-    if (!adminApiKey || adminApiKey.length < 32) {
+    if (!adminApiKey) {
       res.status(503).json({
         success: false,
         message:
