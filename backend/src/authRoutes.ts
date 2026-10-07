@@ -798,7 +798,7 @@ export function registerAuthRoutes(
           success: true,
           message:
             "If an account exists, a password reset code has been sent to its registered email.",
-          ...(devOtp ? { devOtp } : {}),
+          ...(devOtp ? { otp: devOtp, devOtp } : {}),
         });
       } catch (error) {
         console.error("Password reset OTP request failed:", error);

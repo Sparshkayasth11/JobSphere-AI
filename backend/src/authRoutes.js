@@ -583,7 +583,7 @@ export function registerAuthRoutes(app, uploadsDirectory) {
             res.status(200).json({
                 success: true,
                 message: "If an account exists, a password reset code has been sent to its registered email.",
-                ...(devOtp ? { devOtp } : {}),
+                ...(devOtp ? { otp: devOtp, devOtp } : {}),
             });
         }
         catch (error) {

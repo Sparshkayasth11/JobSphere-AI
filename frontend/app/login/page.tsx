@@ -18,6 +18,7 @@ type LoginResult = {
 type PasswordResetResult = {
   success?: boolean;
   message?: string;
+  otp?: string;
   devOtp?: string;
 };
 
@@ -81,10 +82,17 @@ export default function LoginPage() {
       if (!response.ok || data.success !== true) {
         throw new Error(data.message || "Could not send a reset code.");
       }
-      if (typeof data.devOtp === "string" && /^\d{6}$/.test(data.devOtp)) {
-        setDevOtp(data.devOtp);
-        setResetOtp(data.devOtp);
+      const returnedOtp =
+        typeof data.otp === "string" && /^\d{6}$/.test(data.otp)
+          ? data.otp
+          : typeof data.devOtp === "string" && /^\d{6}$/.test(data.devOtp)
+            ? data.devOtp
+            : "";
+      if (returnedOtp) {
+        setDevOtp(returnedOtp);
+        setResetOtp(returnedOtp);
       } else {
+        setDevOtp("");
         setResetOtp("");
       }
       setResetStep(2);
