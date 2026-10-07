@@ -652,9 +652,14 @@ export function registerAuthRoutes(
   );
 
   app.get("/api/admin/users", async (req: Request, res: Response) => {
-    const adminApiKey = process.env.ADMIN_API_KEY;
-    const suppliedApiKey = req.header("x-admin-key");
-    if (!adminApiKey) {
+    const allowedAdminKeys = (process.env.ADMIN_API_KEY || "")
+      .split(",")
+      .map((key) => key.trim())
+      .filter(Boolean);
+    const bodyAdminKey =
+      typeof req.body?.key === "string" ? req.body.key.trim() : "";
+    const suppliedApiKey = req.header("x-admin-key")?.trim() || bodyAdminKey;
+    if (allowedAdminKeys.length === 0) {
       res.status(503).json({
         success: false,
         message:
@@ -664,8 +669,14 @@ export function registerAuthRoutes(
     }
     if (
       !suppliedApiKey ||
-      Buffer.byteLength(suppliedApiKey) !== Buffer.byteLength(adminApiKey) ||
-      !timingSafeEqual(Buffer.from(suppliedApiKey), Buffer.from(adminApiKey))
+      !allowedAdminKeys.some((allowedKey) => {
+        const suppliedBytes = Buffer.from(suppliedApiKey);
+        const allowedBytes = Buffer.from(allowedKey);
+        return (
+          suppliedBytes.length === allowedBytes.length &&
+          timingSafeEqual(suppliedBytes, allowedBytes)
+        );
+      })
     ) {
       res.status(401).json({
         success: false,
