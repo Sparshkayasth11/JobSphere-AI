@@ -20,7 +20,7 @@ function getUsersFilePath() {
     return candidateStorePath;
 }
 function publicCandidate(candidate) {
-    const { passwordHash: _passwordHash, ...publicFields } = candidate;
+    const { passwordHash: _passwordHash, password: _password, ...publicFields } = candidate;
     return publicFields;
 }
 function normalizeEmail(email) {
@@ -71,7 +71,10 @@ async function readCandidates() {
                 typeof candidate.name !== "string" ||
                 typeof candidate.email !== "string" ||
                 typeof candidate.phone !== "string" ||
-                typeof candidate.passwordHash !== "string" ||
+                (typeof candidate.passwordHash !== "string" &&
+                    typeof candidate.password !== "string") ||
+                (candidate.password !== undefined &&
+                    typeof candidate.password !== "string") ||
                 (candidate.profilePicture !== null &&
                     typeof candidate.profilePicture !== "string") ||
                 candidate.isVerified !== true ||
@@ -259,7 +262,9 @@ export function registerAuthRoutes(app, uploadsDirectory) {
         const name = req.body?.name;
         const email = req.body?.email;
         const phone = req.body?.phone;
-        const password = req.body?.password;
+        const password = typeof req.body?.password === "string"
+            ? req.body.password.trim()
+            : "";
         if (typeof name !== "string" ||
             name.trim().length < 2 ||
             name.trim().length > 100 ||
@@ -267,7 +272,6 @@ export function registerAuthRoutes(app, uploadsDirectory) {
             !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) ||
             typeof phone !== "string" ||
             !isValidPhone(normalizePhone(phone)) ||
-            typeof password !== "string" ||
             password.length < 8 ||
             password.length > 128) {
             res.status(400).json({
@@ -472,10 +476,11 @@ export function registerAuthRoutes(app, uploadsDirectory) {
     });
     app.post("/api/auth/login", async (req, res) => {
         const login = req.body?.emailOrPhone;
-        const password = req.body?.password;
+        const password = typeof req.body?.password === "string"
+            ? req.body.password.trim()
+            : "";
         if (typeof login !== "string" ||
             !login.trim() ||
-            typeof password !== "string" ||
             !password) {
             res.status(400).json({
                 success: false,
@@ -496,8 +501,10 @@ export function registerAuthRoutes(app, uploadsDirectory) {
                 });
                 return;
             }
-            const isPassOk = (await verifyPassword(password, candidate.passwordHash)) ||
-                password === candidate.passwordHash;
+            const storedHash = candidate.passwordHash || candidate.password || "";
+            const isPassOk = storedHash.length > 0 &&
+                ((await verifyPassword(password, storedHash)) ||
+                    password === storedHash);
             if (!isPassOk) {
                 res.status(401).json({
                     success: false,
@@ -505,13 +512,14 @@ export function registerAuthRoutes(app, uploadsDirectory) {
                 });
                 return;
             }
-            if (!isBcryptPasswordHash(candidate.passwordHash)) {
+            if (!isBcryptPasswordHash(storedHash)) {
                 const upgradedHash = await hashPassword(password);
                 const updatedCandidate = await updateCandidates((storedCandidates) => {
                     const stored = storedCandidates.find((entry) => entry.id === candidate?.id);
                     if (!stored)
                         return null;
                     stored.passwordHash = upgradedHash;
+                    delete stored.password;
                     return stored;
                 });
                 if (!updatedCandidate) {

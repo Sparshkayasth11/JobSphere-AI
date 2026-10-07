@@ -44,13 +44,14 @@ type CandidateRecord = {
   name: string;
   email: string;
   phone: string;
-  passwordHash: string;
+  passwordHash?: string;
+  password?: string;
   profilePicture: string | null;
   isVerified: true;
   joinedAt: string;
 };
 
-type PublicCandidate = Omit<CandidateRecord, "passwordHash">;
+type PublicCandidate = Omit<CandidateRecord, "passwordHash" | "password">;
 
 type PendingSignup = {
   id: string;
@@ -81,7 +82,11 @@ function getUsersFilePath(): string {
 }
 
 function publicCandidate(candidate: CandidateRecord): PublicCandidate {
-  const { passwordHash: _passwordHash, ...publicFields } = candidate;
+  const {
+    passwordHash: _passwordHash,
+    password: _password,
+    ...publicFields
+  } = candidate;
   return publicFields;
 }
 
@@ -145,7 +150,10 @@ async function readCandidates(): Promise<CandidateRecord[]> {
           typeof candidate.name !== "string" ||
           typeof candidate.email !== "string" ||
           typeof candidate.phone !== "string" ||
-          typeof candidate.passwordHash !== "string" ||
+          (typeof candidate.passwordHash !== "string" &&
+            typeof candidate.password !== "string") ||
+          (candidate.password !== undefined &&
+            typeof candidate.password !== "string") ||
           (candidate.profilePicture !== null &&
             typeof candidate.profilePicture !== "string") ||
           candidate.isVerified !== true ||
@@ -378,7 +386,10 @@ export function registerAuthRoutes(
       const name = req.body?.name;
       const email = req.body?.email;
       const phone = req.body?.phone;
-      const password = req.body?.password;
+      const password =
+        typeof req.body?.password === "string"
+          ? req.body.password.trim()
+          : "";
       if (
         typeof name !== "string" ||
         name.trim().length < 2 ||
@@ -387,7 +398,6 @@ export function registerAuthRoutes(
         !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) ||
         typeof phone !== "string" ||
         !isValidPhone(normalizePhone(phone)) ||
-        typeof password !== "string" ||
         password.length < 8 ||
         password.length > 128
       ) {
@@ -634,11 +644,13 @@ export function registerAuthRoutes(
       res: Response,
     ) => {
       const login = req.body?.emailOrPhone;
-      const password = req.body?.password;
+      const password =
+        typeof req.body?.password === "string"
+          ? req.body.password.trim()
+          : "";
       if (
         typeof login !== "string" ||
         !login.trim() ||
-        typeof password !== "string" ||
         !password
       ) {
         res.status(400).json({
@@ -666,9 +678,11 @@ export function registerAuthRoutes(
           });
           return;
         }
+        const storedHash = candidate.passwordHash || candidate.password || "";
         const isPassOk =
-          (await verifyPassword(password, candidate.passwordHash)) ||
-          password === candidate.passwordHash;
+          storedHash.length > 0 &&
+          ((await verifyPassword(password, storedHash)) ||
+            password === storedHash);
         if (!isPassOk) {
           res.status(401).json({
             success: false,
@@ -676,7 +690,7 @@ export function registerAuthRoutes(
           });
           return;
         }
-        if (!isBcryptPasswordHash(candidate.passwordHash)) {
+        if (!isBcryptPasswordHash(storedHash)) {
           const upgradedHash = await hashPassword(password);
           const updatedCandidate = await updateCandidates((storedCandidates) => {
             const stored = storedCandidates.find(
@@ -684,6 +698,7 @@ export function registerAuthRoutes(
             );
             if (!stored) return null;
             stored.passwordHash = upgradedHash;
+            delete stored.password;
             return stored;
           });
           if (!updatedCandidate) {
