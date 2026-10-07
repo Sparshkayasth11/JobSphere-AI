@@ -9,6 +9,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, extname, resolve } from "node:path";
 import type { Express, Request, Response } from "express";
 import multer from "multer";
+import bcrypt from "bcryptjs";
 import { Resend } from "resend";
 import { fileURLToPath } from "node:url";
 
@@ -69,7 +70,6 @@ type JwtPayload = {
 };
 
 const pendingSignups = new Map<string, PendingSignup>();
-let cachedCandidates: CandidateRecord[] | null = null;
 let candidateWriteQueue: Promise<void> = Promise.resolve();
 
 function getUsersFilePath(): string {
@@ -97,22 +97,18 @@ function isValidPhone(phone: string): boolean {
   return /^\+?[1-9]\d{6,14}$/.test(phone);
 }
 
-function hashPassword(password: string, salt = randomUUID()): Promise<string> {
-  return new Promise((resolveHash, reject) => {
-    scrypt(password, salt, 64, (error, derivedKey) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolveHash(`${salt}:${derivedKey.toString("hex")}`);
-    });
-  });
+function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, 12);
 }
 
 async function verifyPassword(
   password: string,
   savedHash: string,
 ): Promise<boolean> {
+  if (isBcryptPasswordHash(savedHash)) {
+    return bcrypt.compare(password, savedHash);
+  }
+
   const separator = savedHash.indexOf(":");
   if (separator < 1) return false;
   const salt = savedHash.slice(0, separator);
@@ -131,8 +127,11 @@ async function verifyPassword(
   return timingSafeEqual(savedDigest, submittedDigest);
 }
 
-async function getCandidates(): Promise<CandidateRecord[]> {
-  if (cachedCandidates) return cachedCandidates;
+function isBcryptPasswordHash(passwordHash: string): boolean {
+  return /^\$2[aby]\$/.test(passwordHash);
+}
+
+async function readCandidates(): Promise<CandidateRecord[]> {
   try {
     const contents = await readFile(getUsersFilePath(), "utf8");
     const parsed: unknown = JSON.parse(contents);
@@ -155,29 +154,40 @@ async function getCandidates(): Promise<CandidateRecord[]> {
     ) {
       throw new Error("Candidate data file has an invalid format.");
     }
-    cachedCandidates = parsed as CandidateRecord[];
+    return parsed as CandidateRecord[];
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    cachedCandidates = [];
+    return [];
   }
-  return cachedCandidates;
 }
 
-async function persistCandidates(): Promise<void> {
-  candidateWriteQueue = candidateWriteQueue
-    .catch(() => undefined)
-    .then(async () => {
-      const candidates = await getCandidates();
-      const usersFilePath = getUsersFilePath();
-      await mkdir(dirname(usersFilePath), { recursive: true });
-      const temporaryPath = `${usersFilePath}.${randomUUID()}.tmp`;
-      await writeFile(temporaryPath, JSON.stringify(candidates, null, 2), {
-        encoding: "utf8",
-        mode: 0o600,
-      });
-      await rename(temporaryPath, usersFilePath);
-    });
+async function getCandidates(): Promise<CandidateRecord[]> {
   await candidateWriteQueue;
+  return readCandidates();
+}
+
+async function updateCandidates<T>(
+  update: (candidates: CandidateRecord[]) => T | Promise<T>,
+): Promise<T> {
+  let result!: T;
+  const operation = candidateWriteQueue.then(async () => {
+    const candidates = await readCandidates();
+    result = await update(candidates);
+    const usersFilePath = getUsersFilePath();
+    await mkdir(dirname(usersFilePath), { recursive: true });
+    const temporaryPath = `${usersFilePath}.${randomUUID()}.tmp`;
+    await writeFile(temporaryPath, JSON.stringify(candidates, null, 2), {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+    await rename(temporaryPath, usersFilePath);
+  });
+  candidateWriteQueue = operation.then(
+    () => undefined,
+    () => undefined,
+  );
+  await operation;
+  return result;
 }
 
 function jwtSecret(): string {
@@ -488,21 +498,6 @@ export function registerAuthRoutes(
       }
 
       try {
-        const candidates = await getCandidates();
-        if (
-          candidates.some(
-            (candidate) =>
-              candidate.email === pending.email ||
-              candidate.phone === pending.phone,
-          )
-        ) {
-          pendingSignups.delete(email);
-          res.status(409).json({
-            success: false,
-            message: "An account already exists with this email or phone number.",
-          });
-          return;
-        }
         const candidate: CandidateRecord = {
           id: pending.id,
           name: pending.name,
@@ -514,21 +509,32 @@ export function registerAuthRoutes(
           joinedAt: new Date().toISOString(),
         };
         const token = createToken(candidate.id);
-        candidates.push(candidate);
-        try {
-          await persistCandidates();
-        } catch (error) {
-          const candidateIndex = candidates.findIndex(
-            (entry) => entry.id === candidate.id,
-          );
-          if (candidateIndex >= 0) candidates.splice(candidateIndex, 1);
-          throw error;
+        const savedCandidate = await updateCandidates((candidates) => {
+          if (
+            candidates.some(
+              (entry) =>
+                entry.email === candidate.email ||
+                entry.phone === candidate.phone,
+            )
+          ) {
+            return null;
+          }
+          candidates.push(candidate);
+          return candidate;
+        });
+        if (!savedCandidate) {
+          pendingSignups.delete(email);
+          res.status(409).json({
+            success: false,
+            message: "An account already exists with this email or phone number.",
+          });
+          return;
         }
         pendingSignups.delete(email);
         res.status(201).json({
           success: true,
           token,
-          candidate: publicCandidate(candidate),
+          candidate: publicCandidate(savedCandidate),
         });
       } catch (error) {
         console.error("Candidate verification failed:", error);
@@ -579,28 +585,33 @@ export function registerAuthRoutes(
           res.status(401).json({ success: false, message: "A valid candidate login is required." });
           return;
         }
-        const candidates = await getCandidates();
-        const candidate = candidates.find((entry) => entry.id === candidateId);
-        if (!candidate) {
-          res.status(401).json({ success: false, message: "Candidate account was not found." });
-          return;
-        }
         const extension =
           req.file.mimetype === "image/jpeg"
             ? ".jpg"
             : req.file.mimetype === "image/png"
               ? ".png"
               : ".webp";
-        const filename = `${candidate.id}-${randomUUID()}${extension}`;
+        const filename = `${candidateId}-${randomUUID()}${extension}`;
         await mkdir(profileImageDirectory, { recursive: true });
         await writeFile(resolve(profileImageDirectory, filename), req.file.buffer, {
           flag: "wx",
         });
-        candidate.profilePicture = `${(
+        const profilePicture = `${(
           process.env.PUBLIC_API_BASE_URL ||
           `http://localhost:${process.env.PORT || 5000}`
         ).replace(/\/+$/, "")}/uploads/profile-images/${encodeURIComponent(filename)}`;
-        await persistCandidates();
+        const candidate = await updateCandidates((candidates) => {
+          const storedCandidate = candidates.find(
+            (entry) => entry.id === candidateId,
+          );
+          if (!storedCandidate) return null;
+          storedCandidate.profilePicture = profilePicture;
+          return storedCandidate;
+        });
+        if (!candidate) {
+          res.status(401).json({ success: false, message: "Candidate account was not found." });
+          return;
+        }
         res.json({
           success: true,
           profilePicture: candidate.profilePicture,
@@ -640,7 +651,7 @@ export function registerAuthRoutes(
       try {
         const candidates = await getCandidates();
         const normalizedLogin = login.trim();
-        const candidate = normalizedLogin.includes("@")
+        let candidate = normalizedLogin.includes("@")
           ? candidates.find(
               (entry) => entry.email === normalizeEmail(normalizedLogin),
             )
@@ -657,6 +668,25 @@ export function registerAuthRoutes(
             message: "The email/phone or password is incorrect.",
           });
           return;
+        }
+        if (!isBcryptPasswordHash(candidate.passwordHash)) {
+          const upgradedHash = await hashPassword(password);
+          const updatedCandidate = await updateCandidates((storedCandidates) => {
+            const stored = storedCandidates.find(
+              (entry) => entry.id === candidate?.id,
+            );
+            if (!stored) return null;
+            stored.passwordHash = upgradedHash;
+            return stored;
+          });
+          if (!updatedCandidate) {
+            res.status(401).json({
+              success: false,
+              message: "The email/phone or password is incorrect.",
+            });
+            return;
+          }
+          candidate = updatedCandidate;
         }
         res.json({
           success: true,

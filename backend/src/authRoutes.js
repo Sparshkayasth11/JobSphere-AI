@@ -2,6 +2,7 @@ import { createHmac, randomInt, randomUUID, scrypt, timingSafeEqual, } from "nod
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, extname, resolve } from "node:path";
 import multer from "multer";
+import bcrypt from "bcryptjs";
 import { Resend } from "resend";
 import { fileURLToPath } from "node:url";
 const OTP_TTL_MS = 10 * 60 * 1000;
@@ -12,7 +13,6 @@ const DEFAULT_JWT_SECRET = "jobsphere_ai_super_secret_jwt_key_2026_production_se
 const authDirectory = dirname(fileURLToPath(import.meta.url));
 let candidateStorePath = null;
 const pendingSignups = new Map();
-let cachedCandidates = null;
 let candidateWriteQueue = Promise.resolve();
 function getUsersFilePath() {
     candidateStorePath ??= resolve(process.env.AUTH_USERS_FILE ||
@@ -32,18 +32,13 @@ function normalizePhone(phone) {
 function isValidPhone(phone) {
     return /^\+?[1-9]\d{6,14}$/.test(phone);
 }
-function hashPassword(password, salt = randomUUID()) {
-    return new Promise((resolveHash, reject) => {
-        scrypt(password, salt, 64, (error, derivedKey) => {
-            if (error) {
-                reject(error);
-                return;
-            }
-            resolveHash(`${salt}:${derivedKey.toString("hex")}`);
-        });
-    });
+function hashPassword(password) {
+    return bcrypt.hash(password, 12);
 }
 async function verifyPassword(password, savedHash) {
+    if (isBcryptPasswordHash(savedHash)) {
+        return bcrypt.compare(password, savedHash);
+    }
     const separator = savedHash.indexOf(":");
     if (separator < 1)
         return false;
@@ -62,9 +57,10 @@ async function verifyPassword(password, savedHash) {
     });
     return timingSafeEqual(savedDigest, submittedDigest);
 }
-async function getCandidates() {
-    if (cachedCandidates)
-        return cachedCandidates;
+function isBcryptPasswordHash(passwordHash) {
+    return /^\$2[aby]\$/.test(passwordHash);
+}
+async function readCandidates() {
     try {
         const contents = await readFile(getUsersFilePath(), "utf8");
         const parsed = JSON.parse(contents);
@@ -82,20 +78,23 @@ async function getCandidates() {
                 typeof candidate.joinedAt !== "string")) {
             throw new Error("Candidate data file has an invalid format.");
         }
-        cachedCandidates = parsed;
+        return parsed;
     }
     catch (error) {
         if (error.code !== "ENOENT")
             throw error;
-        cachedCandidates = [];
+        return [];
     }
-    return cachedCandidates;
 }
-async function persistCandidates() {
-    candidateWriteQueue = candidateWriteQueue
-        .catch(() => undefined)
-        .then(async () => {
-        const candidates = await getCandidates();
+async function getCandidates() {
+    await candidateWriteQueue;
+    return readCandidates();
+}
+async function updateCandidates(update) {
+    let result;
+    const operation = candidateWriteQueue.then(async () => {
+        const candidates = await readCandidates();
+        result = await update(candidates);
         const usersFilePath = getUsersFilePath();
         await mkdir(dirname(usersFilePath), { recursive: true });
         const temporaryPath = `${usersFilePath}.${randomUUID()}.tmp`;
@@ -105,7 +104,9 @@ async function persistCandidates() {
         });
         await rename(temporaryPath, usersFilePath);
     });
-    await candidateWriteQueue;
+    candidateWriteQueue = operation.then(() => undefined, () => undefined);
+    await operation;
+    return result;
 }
 function jwtSecret() {
     const configuredSecret = process.env.JWT_SECRET;
@@ -357,16 +358,6 @@ export function registerAuthRoutes(app, uploadsDirectory) {
             return;
         }
         try {
-            const candidates = await getCandidates();
-            if (candidates.some((candidate) => candidate.email === pending.email ||
-                candidate.phone === pending.phone)) {
-                pendingSignups.delete(email);
-                res.status(409).json({
-                    success: false,
-                    message: "An account already exists with this email or phone number.",
-                });
-                return;
-            }
             const candidate = {
                 id: pending.id,
                 name: pending.name,
@@ -378,21 +369,27 @@ export function registerAuthRoutes(app, uploadsDirectory) {
                 joinedAt: new Date().toISOString(),
             };
             const token = createToken(candidate.id);
-            candidates.push(candidate);
-            try {
-                await persistCandidates();
-            }
-            catch (error) {
-                const candidateIndex = candidates.findIndex((entry) => entry.id === candidate.id);
-                if (candidateIndex >= 0)
-                    candidates.splice(candidateIndex, 1);
-                throw error;
+            const savedCandidate = await updateCandidates((candidates) => {
+                if (candidates.some((entry) => entry.email === candidate.email ||
+                    entry.phone === candidate.phone)) {
+                    return null;
+                }
+                candidates.push(candidate);
+                return candidate;
+            });
+            if (!savedCandidate) {
+                pendingSignups.delete(email);
+                res.status(409).json({
+                    success: false,
+                    message: "An account already exists with this email or phone number.",
+                });
+                return;
             }
             pendingSignups.delete(email);
             res.status(201).json({
                 success: true,
                 token,
-                candidate: publicCandidate(candidate),
+                candidate: publicCandidate(savedCandidate),
             });
         }
         catch (error) {
@@ -436,25 +433,29 @@ export function registerAuthRoutes(app, uploadsDirectory) {
                 res.status(401).json({ success: false, message: "A valid candidate login is required." });
                 return;
             }
-            const candidates = await getCandidates();
-            const candidate = candidates.find((entry) => entry.id === candidateId);
-            if (!candidate) {
-                res.status(401).json({ success: false, message: "Candidate account was not found." });
-                return;
-            }
             const extension = req.file.mimetype === "image/jpeg"
                 ? ".jpg"
                 : req.file.mimetype === "image/png"
                     ? ".png"
                     : ".webp";
-            const filename = `${candidate.id}-${randomUUID()}${extension}`;
+            const filename = `${candidateId}-${randomUUID()}${extension}`;
             await mkdir(profileImageDirectory, { recursive: true });
             await writeFile(resolve(profileImageDirectory, filename), req.file.buffer, {
                 flag: "wx",
             });
-            candidate.profilePicture = `${(process.env.PUBLIC_API_BASE_URL ||
+            const profilePicture = `${(process.env.PUBLIC_API_BASE_URL ||
                 `http://localhost:${process.env.PORT || 5000}`).replace(/\/+$/, "")}/uploads/profile-images/${encodeURIComponent(filename)}`;
-            await persistCandidates();
+            const candidate = await updateCandidates((candidates) => {
+                const storedCandidate = candidates.find((entry) => entry.id === candidateId);
+                if (!storedCandidate)
+                    return null;
+                storedCandidate.profilePicture = profilePicture;
+                return storedCandidate;
+            });
+            if (!candidate) {
+                res.status(401).json({ success: false, message: "Candidate account was not found." });
+                return;
+            }
             res.json({
                 success: true,
                 profilePicture: candidate.profilePicture,
@@ -485,7 +486,7 @@ export function registerAuthRoutes(app, uploadsDirectory) {
         try {
             const candidates = await getCandidates();
             const normalizedLogin = login.trim();
-            const candidate = normalizedLogin.includes("@")
+            let candidate = normalizedLogin.includes("@")
                 ? candidates.find((entry) => entry.email === normalizeEmail(normalizedLogin))
                 : candidates.find((entry) => entry.phone === normalizePhone(normalizedLogin));
             if (!candidate ||
@@ -495,6 +496,24 @@ export function registerAuthRoutes(app, uploadsDirectory) {
                     message: "The email/phone or password is incorrect.",
                 });
                 return;
+            }
+            if (!isBcryptPasswordHash(candidate.passwordHash)) {
+                const upgradedHash = await hashPassword(password);
+                const updatedCandidate = await updateCandidates((storedCandidates) => {
+                    const stored = storedCandidates.find((entry) => entry.id === candidate?.id);
+                    if (!stored)
+                        return null;
+                    stored.passwordHash = upgradedHash;
+                    return stored;
+                });
+                if (!updatedCandidate) {
+                    res.status(401).json({
+                        success: false,
+                        message: "The email/phone or password is incorrect.",
+                    });
+                    return;
+                }
+                candidate = updatedCandidate;
             }
             res.json({
                 success: true,

@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { isAdminApiKeyConfigured, isAllowedAdminApiKey, registerAuthRoutes, } from "./authRoutes.js";
 // Import resume agent logic
 import { parseResumeText, calculateJobMatch } from "./resumeAgent.js";
+dotenv.config();
 function isAiResumeScanRecord(value) {
     if (typeof value !== "object" || value === null)
         return false;
@@ -24,12 +25,62 @@ function isAiResumeScanRecord(value) {
         typeof scan.resumeUrl === "string" &&
         typeof scan.analyzedAt === "string");
 }
+function isAppliedCandidateRecord(value) {
+    if (typeof value !== "object" || value === null)
+        return false;
+    const candidate = value;
+    return (typeof candidate.id === "string" &&
+        typeof candidate.jobId === "string" &&
+        typeof candidate.candidateName === "string" &&
+        typeof candidate.email === "string" &&
+        typeof candidate.jobTitle === "string" &&
+        typeof candidate.company === "string" &&
+        typeof candidate.matchScore === "string" &&
+        (candidate.aiRecommendationStatus === "approve" ||
+            candidate.aiRecommendationStatus === "review" ||
+            candidate.aiRecommendationStatus === "reject") &&
+        typeof candidate.aiRecommendationReason === "string" &&
+        (candidate.status === "Applied" ||
+            candidate.status === "Shortlisted" ||
+            candidate.status === "Rejected") &&
+        typeof candidate.appliedAt === "string" &&
+        typeof candidate.coverLetter === "string" &&
+        typeof candidate.resumeUrl === "string");
+}
 const backendDirectory = dirname(fileURLToPath(import.meta.url));
 const uploadsDirectory = resolve(process.env.UPLOADS_DIR || resolve(backendDirectory, "../uploads"));
 mkdirSync(uploadsDirectory, { recursive: true });
 const aiResumeUploadDirectory = resolve(uploadsDirectory, "ai-resumes");
 mkdirSync(aiResumeUploadDirectory, { recursive: true });
-const appliedCandidates = [];
+const applicationsPath = resolve(process.env.APPLICATIONS_FILE ||
+    resolve(backendDirectory, "../data/applications.json"));
+const persistedApplications = existsSync(applicationsPath)
+    ? JSON.parse(readFileSync(applicationsPath, "utf8"))
+    : { candidates: [], appliedJobIds: [] };
+if (typeof persistedApplications !== "object" ||
+    persistedApplications === null ||
+    !("candidates" in persistedApplications) ||
+    !Array.isArray(persistedApplications.candidates) ||
+    !persistedApplications.candidates.every(isAppliedCandidateRecord) ||
+    !("appliedJobIds" in persistedApplications) ||
+    !Array.isArray(persistedApplications.appliedJobIds) ||
+    !persistedApplications.appliedJobIds.every((jobId) => Number.isInteger(jobId) && jobId > 0)) {
+    throw new Error("Persisted application data has an invalid format.");
+}
+const appliedCandidates = persistedApplications.candidates;
+const appliedJobsMap = {};
+for (const jobId of persistedApplications.appliedJobIds) {
+    appliedJobsMap[jobId] = true;
+}
+function persistApplications() {
+    const temporaryPath = `${applicationsPath}.${randomUUID()}.tmp`;
+    mkdirSync(dirname(applicationsPath), { recursive: true });
+    writeFileSync(temporaryPath, JSON.stringify({
+        candidates: appliedCandidates,
+        appliedJobIds: Object.keys(appliedJobsMap).map(Number),
+    }, null, 2), { encoding: "utf8", mode: 0o600 });
+    renameSync(temporaryPath, applicationsPath);
+}
 const aiResumeScansPath = resolve(backendDirectory, "../data/ai-resume-scans.json");
 const persistedAiResumeScans = existsSync(aiResumeScansPath)
     ? JSON.parse(readFileSync(aiResumeScansPath, "utf8"))
@@ -204,7 +255,6 @@ function calculateSkillMatch(userSkills, jobSkills) {
     const matchedCount = jobSkills.filter((skill) => normalizedUserSkills.has(skill.trim().toLowerCase())).length;
     return Math.round(40 + (matchedCount / jobSkills.length) * 60);
 }
-dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 const configuredFrontendOrigin = process.env.FRONTEND_URL
@@ -334,8 +384,6 @@ const jobs = [
         skills: ["React", "Next.js", "TypeScript"],
     },
 ];
-// Memory storage for applied jobs
-const appliedJobsMap = {};
 // GET APPLIED JOBS API
 app.get("/api/applications", (_req, res) => {
     const appliedIds = Object.keys(appliedJobsMap)
@@ -353,7 +401,21 @@ app.post("/api/jobs/:id/apply", (req, res) => {
         res.status(400).json({ success: false, message: "Invalid job ID" });
         return;
     }
+    const wasApplied = appliedJobsMap[jobId] === true;
     appliedJobsMap[jobId] = true;
+    try {
+        persistApplications();
+    }
+    catch (error) {
+        if (!wasApplied)
+            delete appliedJobsMap[jobId];
+        console.error("Could not persist applied job:", error);
+        res.status(500).json({
+            success: false,
+            message: "Could not save your job application. Please try again.",
+        });
+        return;
+    }
     res.json({
         success: true,
         message: `Successfully applied to job #${jobId}`,
@@ -460,11 +522,30 @@ app.post("/api/apply-job", handleAppliedResumeUpload, async (req, res) => {
         status: "Applied",
         appliedAt: new Date().toISOString(),
         coverLetter,
-        resumeUrl: `${(process.env.PUBLIC_API_BASE_URL || `http://localhost:${PORT}`).replace(/\/+$/, "")}/uploads/ai-resumes/${encodeURIComponent(filename)}`,
+        resumeUrl: `${(process.env.PUBLIC_API_BASE_URL || `http://localhost:${PORT}`).replace(/\/+$/, "")}/uploads/${encodeURIComponent(filename)}`,
     };
     appliedCandidates.unshift(candidate);
+    const jobIdNumber = Number(jobId);
+    const hadAppliedJob = Number.isInteger(jobIdNumber)
+        ? appliedJobsMap[jobIdNumber] === true
+        : false;
     if (/^\d+$/.test(jobId)) {
-        appliedJobsMap[Number(jobId)] = true;
+        appliedJobsMap[jobIdNumber] = true;
+    }
+    try {
+        persistApplications();
+    }
+    catch (error) {
+        appliedCandidates.shift();
+        if (/^\d+$/.test(jobId) && !hadAppliedJob) {
+            delete appliedJobsMap[jobIdNumber];
+        }
+        console.error("Could not persist candidate application:", error);
+        res.status(500).json({
+            success: false,
+            message: "Could not save your application. Please try again.",
+        });
+        return;
     }
     res.status(201).json({ success: true, candidate });
 });
@@ -492,7 +573,20 @@ app.patch("/api/admin/candidates/:id", (req, res) => {
         ...candidate,
         status: status,
     };
-    appliedCandidates[appliedCandidates.indexOf(candidate)] = updatedCandidate;
+    const candidateIndex = appliedCandidates.indexOf(candidate);
+    appliedCandidates[candidateIndex] = updatedCandidate;
+    try {
+        persistApplications();
+    }
+    catch (error) {
+        appliedCandidates[candidateIndex] = candidate;
+        console.error("Could not persist candidate application status:", error);
+        res.status(500).json({
+            success: false,
+            message: "Could not update the application. Please try again.",
+        });
+        return;
+    }
     res.json({ success: true, candidate: updatedCandidate });
 });
 // =========================

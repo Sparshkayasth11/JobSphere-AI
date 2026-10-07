@@ -1,5 +1,6 @@
 /.env
 /data/candidates.json
 /data/ai-resume-scans.json
+/data/applications.json
 /uploads/profile-images/
 /uploads/ai-resumes/
