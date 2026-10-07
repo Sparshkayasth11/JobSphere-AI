@@ -629,7 +629,10 @@ app.patch(
       return;
     }
 
-    const updatedCandidate = { ...candidate, status };
+    const updatedCandidate: AppliedCandidate = {
+      ...candidate,
+      status: status as AppliedCandidate["status"],
+    };
     appliedCandidates[appliedCandidates.indexOf(candidate)] = updatedCandidate;
     res.json({ success: true, candidate: updatedCandidate });
   },

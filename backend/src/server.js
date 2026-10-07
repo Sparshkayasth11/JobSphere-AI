@@ -429,7 +429,10 @@ app.patch("/api/admin/candidates/:id", (req, res) => {
         });
         return;
     }
-    const updatedCandidate = { ...candidate, status };
+    const updatedCandidate = {
+        ...candidate,
+        status: status,
+    };
     appliedCandidates[appliedCandidates.indexOf(candidate)] = updatedCandidate;
     res.json({ success: true, candidate: updatedCandidate });
 });
