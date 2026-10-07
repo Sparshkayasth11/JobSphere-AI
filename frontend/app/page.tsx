@@ -356,8 +356,9 @@ function getCandidateRecommendation(candidate: Application): {
       : parsedMatchScore >= 50
         ? "review"
         : "reject";
-  const status =
-    candidate.aiRecommendationStatus ?? computedStatus;
+  const status = Number.isFinite(parsedMatchScore)
+    ? computedStatus
+    : candidate.aiRecommendationStatus ?? computedStatus;
 
   return {
     status,
@@ -441,7 +442,7 @@ function AdminApplicantsTable({
         </div>
 
         <div className="w-full overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 shadow-xl">
-          <table className="w-full min-w-[1240px] text-left text-sm text-zinc-300">
+          <table className="w-full min-w-[1440px] text-left text-sm text-zinc-300">
             <thead>
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 border-b border-zinc-800">
@@ -496,39 +497,19 @@ function AdminApplicantsTable({
                             : "border-rose-500/20 bg-rose-500/10 text-rose-300";
                       const recommendationLabel =
                         recommendation.status === "approve"
-                          ? "Approve"
+                          ? "Recommend Approve"
                           : recommendation.status === "review"
-                            ? "Review"
-                            : "Reject";
+                            ? "Needs Review"
+                            : "Recommend Reject";
 
                       return (
-                        <div className="flex flex-col items-start gap-2">
-                          <span
-                            title={recommendation.reason}
-                            aria-label={`AI recommendation: ${recommendationLabel}. ${recommendation.reason}`}
-                            className={`cursor-help rounded-full border px-2.5 py-1 text-xs font-medium ${recommendationStyle}`}
-                          >
-                            {recommendationLabel}
-                          </span>
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                onDecision(candidate, "Shortlisted")
-                              }
-                              className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-500/20"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => onDecision(candidate, "Rejected")}
-                              className="rounded-md border border-rose-500/20 bg-rose-500/10 px-2 py-1 text-xs font-medium text-rose-300 transition-colors hover:bg-rose-500/20"
-                            >
-                              Reject
-                            </button>
-                          </div>
-                        </div>
+                        <span
+                          title={recommendation.reason}
+                          aria-label={`AI recommendation: ${recommendationLabel}. ${recommendation.reason}`}
+                          className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-medium ${recommendationStyle}`}
+                        >
+                          {recommendationLabel}
+                        </span>
                       );
                     })()}
                   </td>
@@ -545,8 +526,8 @@ function AdminApplicantsTable({
                       {candidate.status}
                     </span>
                   </td>
-                  <td className="px-4 py-4 text-sm text-zinc-200 border-b border-zinc-800/60">
-                    <div className="flex items-center justify-end gap-2">
+                  <td className="min-w-[500px] px-4 py-4 text-sm text-zinc-200 border-b border-zinc-800/60">
+                    <div className="flex flex-wrap items-center justify-start gap-2">
                       <button
                         type="button"
                         onClick={() => setDetailsCandidate(candidate)}
