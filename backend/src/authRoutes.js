@@ -2,9 +2,10 @@ import { createHmac, randomInt, randomUUID, scrypt, timingSafeEqual, } from "nod
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, extname, resolve } from "node:path";
 import multer from "multer";
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import { fileURLToPath } from "node:url";
 const OTP_TTL_MS = 10 * 60 * 1000;
+const OTP_EMAIL_TIMEOUT_MS = 10 * 1000;
 const JWT_TTL_SECONDS = 7 * 24 * 60 * 60;
 const MAX_PROFILE_IMAGE_BYTES = 5 * 1024 * 1024;
 const DEFAULT_JWT_SECRET = "jobsphere_ai_super_secret_jwt_key_2026_production_secure_token_key";
@@ -163,30 +164,38 @@ function requestCandidateId(req) {
     return verifyToken(authorization.slice("Bearer ".length));
 }
 async function sendSignupOtpEmail(email, otp) {
-    const host = process.env.SMTP_HOST;
-    const port = Number(process.env.SMTP_PORT || 465);
-    const user = process.env.SMTP_USER;
-    const password = process.env.SMTP_PASS;
-    const from = process.env.SMTP_FROM;
-    if (!host || !user || !password || !from) {
-        throw new Error("Missing SMTP configuration. Set SMTP_HOST, SMTP_USER, SMTP_PASS, and SMTP_FROM.");
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+        throw new Error("Missing Resend configuration. Set RESEND_API_KEY.");
     }
-    if (!Number.isInteger(port) || port < 1 || port > 65535) {
-        throw new Error("SMTP_PORT must be a valid port number.");
+    const resend = new Resend(apiKey);
+    let timeout;
+    try {
+        const { data, error } = await Promise.race([
+            resend.emails.send({
+                from: "onboarding@resend.dev",
+                to: email,
+                subject: "Your JobSphere AI verification code",
+                text: `Your JobSphere AI verification code is ${otp}. It expires in 10 minutes. If you did not request it, ignore this email.`,
+                html: `<div style="font-family:Arial,sans-serif"><h2>Verify your JobSphere AI account</h2><p>Your one-time verification code is <strong>${otp}</strong>.</p><p>This code expires in 10 minutes. If you did not request it, ignore this email.</p></div>`,
+            }),
+            new Promise((_resolve, reject) => {
+                timeout = setTimeout(() => {
+                    reject(new Error("OTP email sending timed out after 10 seconds."));
+                }, OTP_EMAIL_TIMEOUT_MS);
+            }),
+        ]);
+        if (error) {
+            throw new Error(error.message);
+        }
+        if (!data?.id) {
+            throw new Error("Resend did not confirm that the OTP email was sent.");
+        }
     }
-    const transporter = nodemailer.createTransport({
-        host,
-        port,
-        secure: port === 465,
-        auth: { user, pass: password },
-    });
-    await transporter.sendMail({
-        from: `JobSphere AI <${from}>`,
-        to: email,
-        subject: "Your JobSphere AI verification code",
-        text: `Your JobSphere AI verification code is ${otp}. It expires in 10 minutes. If you did not request it, ignore this email.`,
-        html: `<div style="font-family:Arial,sans-serif"><h2>Verify your JobSphere AI account</h2><p>Your one-time verification code is <strong>${otp}</strong>.</p><p>This code expires in 10 minutes. If you did not request it, ignore this email.</p></div>`,
-    });
+    finally {
+        if (timeout)
+            clearTimeout(timeout);
+    }
 }
 function isProfileImage(file) {
     const extension = extname(file.originalname).toLowerCase();
@@ -262,7 +271,18 @@ export function registerAuthRoutes(app, uploadsDirectory) {
             }
             const pendingPasswordHash = await hashPassword(password);
             const otp = String(randomInt(100000, 1000000));
-            await sendSignupOtpEmail(normalizedEmail, otp);
+            try {
+                await sendSignupOtpEmail(normalizedEmail, otp);
+            }
+            catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                console.error(`Failed to send signup OTP to ${normalizedEmail}:`, error);
+                res.status(500).json({
+                    success: false,
+                    message,
+                });
+                return;
+            }
             pendingSignups.set(normalizedEmail, {
                 id: randomUUID(),
                 name: name.trim(),
@@ -474,7 +494,7 @@ export function registerAuthRoutes(app, uploadsDirectory) {
     app.get("/api/admin/users", async (req, res) => {
         const adminApiKey = process.env.ADMIN_API_KEY;
         const suppliedApiKey = req.header("x-admin-key");
-        if (!adminApiKey || adminApiKey.length < 32) {
+        if (!adminApiKey) {
             res.status(503).json({
                 success: false,
                 message: "The registered-candidates directory is unavailable until ADMIN_API_KEY is configured.",
