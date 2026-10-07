@@ -249,6 +249,28 @@ function requestCandidateId(req: Request): string | null {
   return verifyToken(authorization.slice("Bearer ".length));
 }
 
+export function isAdminApiKeyConfigured(): boolean {
+  return (process.env.ADMIN_API_KEY || "")
+    .split(",")
+    .some((key) => key.trim().length > 0);
+}
+
+export function isAllowedAdminApiKey(suppliedKey: string | undefined): boolean {
+  if (!suppliedKey) return false;
+  const suppliedBytes = Buffer.from(suppliedKey.trim());
+  return (process.env.ADMIN_API_KEY || "")
+    .split(",")
+    .map((key) => key.trim())
+    .filter(Boolean)
+    .some((allowedKey) => {
+      const allowedBytes = Buffer.from(allowedKey);
+      return (
+        suppliedBytes.length === allowedBytes.length &&
+        timingSafeEqual(suppliedBytes, allowedBytes)
+      );
+    });
+}
+
 async function sendSignupOtpEmail(email: string, otp: string): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
@@ -652,14 +674,10 @@ export function registerAuthRoutes(
   );
 
   app.get("/api/admin/users", async (req: Request, res: Response) => {
-    const allowedAdminKeys = (process.env.ADMIN_API_KEY || "")
-      .split(",")
-      .map((key) => key.trim())
-      .filter(Boolean);
     const bodyAdminKey =
       typeof req.body?.key === "string" ? req.body.key.trim() : "";
     const suppliedApiKey = req.header("x-admin-key")?.trim() || bodyAdminKey;
-    if (allowedAdminKeys.length === 0) {
+    if (!isAdminApiKeyConfigured()) {
       res.status(503).json({
         success: false,
         message:
@@ -667,17 +685,7 @@ export function registerAuthRoutes(
       });
       return;
     }
-    if (
-      !suppliedApiKey ||
-      !allowedAdminKeys.some((allowedKey) => {
-        const suppliedBytes = Buffer.from(suppliedApiKey);
-        const allowedBytes = Buffer.from(allowedKey);
-        return (
-          suppliedBytes.length === allowedBytes.length &&
-          timingSafeEqual(suppliedBytes, allowedBytes)
-        );
-      })
-    ) {
+    if (!isAllowedAdminApiKey(suppliedApiKey)) {
       res.status(401).json({
         success: false,
         message: "A valid admin key is required to open the candidate directory.",

@@ -4,10 +4,14 @@ import dotenv from "dotenv";
 import multer from "multer";
 import pdfParse from "pdf-parse";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { registerAuthRoutes } from "./authRoutes.js";
+import {
+  isAdminApiKeyConfigured,
+  isAllowedAdminApiKey,
+  registerAuthRoutes,
+} from "./authRoutes.js";
 
 // Import resume agent logic
 import { parseResumeText, calculateJobMatch } from "./resumeAgent.js";
@@ -98,12 +102,61 @@ type AppliedCandidate = {
   resumeUrl: string;
 };
 
+type AiResumeScan = {
+  id: string;
+  candidateName: string;
+  extractedSkills: string[];
+  atsScore: number;
+  email: string;
+  resumeUrl: string;
+  analyzedAt: string;
+};
+
+function isAiResumeScanRecord(value: unknown): value is AiResumeScan {
+  if (typeof value !== "object" || value === null) return false;
+  const scan = value as Record<string, unknown>;
+  return (
+    typeof scan.id === "string" &&
+    typeof scan.candidateName === "string" &&
+    Array.isArray(scan.extractedSkills) &&
+    scan.extractedSkills.every((skill) => typeof skill === "string") &&
+    typeof scan.atsScore === "number" &&
+    Number.isFinite(scan.atsScore) &&
+    typeof scan.email === "string" &&
+    typeof scan.resumeUrl === "string" &&
+    typeof scan.analyzedAt === "string"
+  );
+}
+
 const backendDirectory = dirname(fileURLToPath(import.meta.url));
 const uploadsDirectory = resolve(
   process.env.UPLOADS_DIR || resolve(backendDirectory, "../uploads"),
 );
 mkdirSync(uploadsDirectory, { recursive: true });
+const aiResumeUploadDirectory = resolve(uploadsDirectory, "ai-resumes");
+mkdirSync(aiResumeUploadDirectory, { recursive: true });
 const appliedCandidates: AppliedCandidate[] = [];
+const aiResumeScansPath = resolve(backendDirectory, "../data/ai-resume-scans.json");
+const persistedAiResumeScans: unknown = existsSync(aiResumeScansPath)
+  ? JSON.parse(readFileSync(aiResumeScansPath, "utf8"))
+  : [];
+if (
+  !Array.isArray(persistedAiResumeScans) ||
+  !persistedAiResumeScans.every(isAiResumeScanRecord)
+) {
+  throw new Error("Persisted AI resume scans have an invalid data format.");
+}
+const aiResumeScans: AiResumeScan[] = persistedAiResumeScans;
+
+function persistAiResumeScans(): void {
+  const temporaryPath = `${aiResumeScansPath}.${randomUUID()}.tmp`;
+  mkdirSync(dirname(aiResumeScansPath), { recursive: true });
+  writeFileSync(temporaryPath, JSON.stringify(aiResumeScans, null, 2), {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+  renameSync(temporaryPath, aiResumeScansPath);
+}
 
 const salaryRoleBenchmarks = [
   { matches: /\b(ai|machine learning|ml|data scientist)\b/i, category: "AI and machine learning", min: 5.5, max: 9 },
@@ -362,6 +415,23 @@ app.use(
 
 // File upload setup using memory buffer
 const upload = multer({ storage: multer.memoryStorage() });
+const aiResumeUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, callback) => {
+    const extension = extname(file.originalname).toLowerCase();
+    if (
+      (extension !== ".pdf" && extension !== ".txt") ||
+      (file.mimetype !== "application/pdf" &&
+        file.mimetype !== "text/plain" &&
+        file.mimetype !== "application/octet-stream")
+    ) {
+      callback(new Error("AI resume scans accept PDF or TXT files only."));
+      return;
+    }
+    callback(null, true);
+  },
+});
 const applyResumeUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
@@ -610,7 +680,7 @@ app.post(
       coverLetter,
       resumeUrl: `${(
         process.env.PUBLIC_API_BASE_URL || `http://localhost:${PORT}`
-      ).replace(/\/+$/, "")}/uploads/${encodeURIComponent(filename)}`,
+      ).replace(/\/+$/, "")}/uploads/ai-resumes/${encodeURIComponent(filename)}`,
     };
     appliedCandidates.unshift(candidate);
     if (/^\d+$/.test(jobId)) {
@@ -1073,10 +1143,37 @@ const analyzeResumeUpload = async (
       ...job,
       matchScore: matchingJobs[index]?.matchPercentage ?? 0,
     }));
+    const emailMatch = resumeText.match(
+      /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i,
+    );
+    const extension = extname(req.file.originalname).toLowerCase();
+    const filename = `${randomUUID()}${extension}`;
+    writeFileSync(resolve(aiResumeUploadDirectory, filename), req.file.buffer);
+    const scan: AiResumeScan = {
+      id: randomUUID(),
+      candidateName,
+      extractedSkills,
+      atsScore,
+      email: emailMatch?.[0] ?? "",
+      resumeUrl: `${(
+        process.env.PUBLIC_API_BASE_URL || `http://localhost:${PORT}`
+      ).replace(/\/+$/, "")}/uploads/ai-resumes/${encodeURIComponent(filename)}`,
+      analyzedAt: new Date().toISOString(),
+    };
+    aiResumeScans.unshift(scan);
+    try {
+      persistAiResumeScans();
+    } catch (error) {
+      aiResumeScans.shift();
+      throw error;
+    }
 
     res.status(200).json({
       success: true,
+      aiScan: scan,
       candidateName,
+      email: scan.email,
+      resumeUrl: scan.resumeUrl,
       extractedSkills,
       atsScore,
       recommendedRoles: getRecommendedRoles(extractedSkills),
@@ -1094,8 +1191,41 @@ const analyzeResumeUpload = async (
   }
 };
 
-app.post("/api/resume/analyze", upload.single("resume"), analyzeResumeUpload);
-app.post("/api/upload-resume", upload.single("resume"), analyzeResumeUpload);
+const handleAiResumeUpload: express.RequestHandler = (req, res, next) => {
+  aiResumeUpload.single("resume")(req, res, (error: unknown) => {
+    if (error) {
+      res.status(400).json({
+        success: false,
+        message: error instanceof Error ? error.message : "Resume upload failed.",
+      });
+      return;
+    }
+    next();
+  });
+};
+
+app.get("/api/admin/ai-resumes", (req: Request, res: Response) => {
+  const suppliedApiKey = req.header("x-admin-key");
+  if (!isAdminApiKeyConfigured()) {
+    res.status(503).json({
+      success: false,
+      message:
+        "The AI resume directory is unavailable until ADMIN_API_KEY is configured.",
+    });
+    return;
+  }
+  if (!isAllowedAdminApiKey(suppliedApiKey)) {
+    res.status(401).json({
+      success: false,
+      message: "A valid admin key is required to view AI resume scans.",
+    });
+    return;
+  }
+  res.json({ success: true, scans: aiResumeScans });
+});
+
+app.post("/api/resume/analyze", handleAiResumeUpload, analyzeResumeUpload);
+app.post("/api/upload-resume", handleAiResumeUpload, analyzeResumeUpload);
 
 // =========================
 // START SERVER

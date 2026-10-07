@@ -171,12 +171,39 @@ type SalaryBenchmarkResult = {
   insights: string[];
 };
 
+type AiResumeScan = {
+  id: string;
+  candidateName: string;
+  extractedSkills: string[];
+  atsScore: number;
+  email: string;
+  resumeUrl: string;
+  analyzedAt: string;
+};
+
+function isAiResumeScan(value: unknown): value is AiResumeScan {
+  if (typeof value !== "object" || value === null) return false;
+  const scan = value as Record<string, unknown>;
+  return (
+    typeof scan.id === "string" &&
+    typeof scan.candidateName === "string" &&
+    Array.isArray(scan.extractedSkills) &&
+    scan.extractedSkills.every((skill) => typeof skill === "string") &&
+    typeof scan.atsScore === "number" &&
+    Number.isFinite(scan.atsScore) &&
+    typeof scan.email === "string" &&
+    typeof scan.resumeUrl === "string" &&
+    typeof scan.analyzedAt === "string"
+  );
+}
+
 type ResumeAnalysisResult = {
   candidateName: string;
   extractedSkills: string[];
   atsScore: number;
   recommendedRoles: string[];
   matchingJobs: { jobId: number; matchPercentage: number }[];
+  aiScan: AiResumeScan;
 };
 
 function isResumeAnalysisResult(value: unknown): value is {
@@ -186,9 +213,11 @@ function isResumeAnalysisResult(value: unknown): value is {
   atsScore: number;
   recommendedRoles: string[];
   matchingJobs: { jobId: number; matchPercentage: number }[];
+  aiScan: AiResumeScan;
 } {
   if (typeof value !== "object" || value === null) return false;
   const result = value as Record<string, unknown>;
+  const aiScan = result.aiScan;
   return (
     result.success === true &&
     typeof result.candidateName === "string" &&
@@ -207,7 +236,8 @@ function isResumeAnalysisResult(value: unknown): value is {
         typeof match.jobId === "number" &&
         "matchPercentage" in match &&
         typeof match.matchPercentage === "number",
-    )
+    ) &&
+    isAiResumeScan(aiScan)
   );
 }
 
@@ -530,6 +560,91 @@ function RegisteredCandidatesTable({
                 className="px-4 py-8 text-center text-sm text-zinc-500"
               >
                 No registered candidates yet.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function AiResumeScansTable({ scans }: { scans: AiResumeScan[] }) {
+  return (
+    <div className="w-full overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 shadow-xl">
+      <table className="w-full min-w-[1050px] text-left text-sm text-zinc-300">
+        <thead>
+          <tr>
+            {[
+              "Candidate Name",
+              "Extracted Skills",
+              "ATS Score",
+              "Extracted Email",
+              "Resume",
+            ].map((heading) => (
+              <th
+                key={heading}
+                className="border-b border-zinc-800 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-400"
+              >
+                {heading}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {scans.map((scan) => {
+            const resumeUrl = getCandidateResumeUrl(scan.resumeUrl);
+            return (
+              <tr key={scan.id} className="hover:bg-zinc-800/30">
+                <td className="border-b border-zinc-800/60 px-4 py-4 font-medium text-zinc-100">
+                  {scan.candidateName}
+                </td>
+                <td className="border-b border-zinc-800/60 px-4 py-4">
+                  {scan.extractedSkills.length > 0 ? (
+                    <div className="flex max-w-lg flex-wrap gap-1.5">
+                      {scan.extractedSkills.map((skill) => (
+                        <span
+                          key={skill}
+                          className="rounded-full border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-300"
+                        >
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-zinc-500">No skills extracted</span>
+                  )}
+                </td>
+                <td className="border-b border-zinc-800/60 px-4 py-4 font-semibold text-emerald-300">
+                  {scan.atsScore}%
+                </td>
+                <td className="border-b border-zinc-800/60 px-4 py-4">
+                  {scan.email || <span className="text-zinc-500">Not found</span>}
+                </td>
+                <td className="border-b border-zinc-800/60 px-4 py-4">
+                  {resumeUrl ? (
+                    <a
+                      href={resumeUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/20"
+                    >
+                      View Resume
+                    </a>
+                  ) : (
+                    <span className="text-xs text-zinc-500">Unavailable</span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+          {scans.length === 0 && (
+            <tr>
+              <td
+                colSpan={5}
+                className="px-4 py-8 text-center text-sm text-zinc-500"
+              >
+                No AI resume scans yet.
               </td>
             </tr>
           )}
@@ -918,13 +1033,18 @@ const [candidateToken, setCandidateToken] = useState("");
 const [candidateProfile, setCandidateProfile] =
   useState<CandidateProfile | null>(null);
 const [applications, setApplications] = useState<Application[]>([]);
-const [adminTab, setAdminTab] = useState<"applicants" | "registered">("applicants");
+const [adminTab, setAdminTab] = useState<
+  "applicants" | "registered" | "ai-resumes"
+>("applicants");
 const [registeredCandidates, setRegisteredCandidates] = useState<
   RegisteredCandidate[]
 >([]);
+const [aiResumeScans, setAiResumeScans] = useState<AiResumeScan[]>([]);
 const [registeredCandidatesLoading, setRegisteredCandidatesLoading] =
   useState(false);
 const [registeredCandidatesError, setRegisteredCandidatesError] = useState("");
+const [aiResumeScansLoading, setAiResumeScansLoading] = useState(false);
+const [aiResumeScansError, setAiResumeScansError] = useState("");
 const [applicationJob, setApplicationJob] = useState<Job | null>(null);
 const [applicantName, setApplicantName] = useState("");
 const [applicantEmail, setApplicantEmail] = useState("");
@@ -1698,35 +1818,17 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
      }),
    );
 
-   const newApplication: Application = {
-     id: `resume-${Date.now()}`,
-     candidateName,
-     email: "applicant@jobsphere.ai",
-     jobTitle: recommendedRoles[0] ?? "Software Engineer Applicant",
-     matchScore: `${Math.max(
-       ...matchingJobs.map((match) => match.matchPercentage),
-       0,
-     )}%`,
-     status: "Applied",
-     appliedAt: new Date().toLocaleDateString(),
-     coverLetter,
-     extractedSkills,
-     atsScore,
-     recommendedRoles,
-     resumeFile:
-       file.type === "application/pdf" ||
-       file.name.toLowerCase().endsWith(".pdf")
-         ? file
-         : undefined,
-   };
-
-   setApplications((current) => [newApplication, ...current]);
+   setAiResumeScans((current) => [
+    result.aiScan,
+    ...current.filter((scan) => scan.id !== result.aiScan.id),
+   ]);
    setResumeAnalysis({
      candidateName,
      extractedSkills,
      atsScore,
      recommendedRoles,
      matchingJobs,
+     aiScan: result.aiScan,
    });
    setIsModalOpen(false);
    toast.success("Resume analyzed successfully.");
@@ -1878,6 +1980,45 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     }
   };
 
+  const loadAiResumeScans = async () => {
+    setAiResumeScansLoading(true);
+    setAiResumeScansError("");
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/ai-resumes`, {
+        headers: { "x-admin-key": adminAuthKey },
+      });
+      const result: unknown = await response.json();
+      if (
+        !response.ok ||
+        typeof result !== "object" ||
+        result === null ||
+        !("success" in result) ||
+        result.success !== true ||
+        !("scans" in result) ||
+        !Array.isArray(result.scans) ||
+        !result.scans.every(isAiResumeScan)
+      ) {
+        const message =
+          typeof result === "object" &&
+          result !== null &&
+          "message" in result &&
+          typeof result.message === "string"
+            ? result.message
+            : "Could not load AI resume scans.";
+        throw new Error(message);
+      }
+      setAiResumeScans(result.scans);
+    } catch (cause) {
+      setAiResumeScansError(
+        cause instanceof Error
+          ? cause.message
+          : "Could not load AI resume scans.",
+      );
+    } finally {
+      setAiResumeScansLoading(false);
+    }
+  };
+
   const candidates = applications;
   if (isAdminView) {
     return (
@@ -1960,6 +2101,20 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
               >
                 Registered Candidates
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminTab("ai-resumes");
+                  void loadAiResumeScans();
+                }}
+                className={`rounded-lg px-4 py-2 text-sm font-medium ${
+                  adminTab === "ai-resumes"
+                    ? "bg-emerald-400 text-zinc-950"
+                    : "border border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                }`}
+              >
+                AI Resumes Analyzed
+              </button>
             </div>
 
             {adminTab === "applicants" ? (
@@ -1968,19 +2123,29 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                 onShortlist={openInterviewScheduler}
                 onDecision={updateCandidateDecision}
               />
-            ) : registeredCandidatesLoading ? (
+            ) : adminTab === "registered" && registeredCandidatesLoading ? (
               <p className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-8 text-center text-sm text-zinc-400">
                 Loading registered candidates...
               </p>
-            ) : registeredCandidatesError ? (
+            ) : adminTab === "registered" && registeredCandidatesError ? (
               <p role="alert" className="rounded-xl border border-rose-500/30 bg-rose-950/40 p-5 text-sm text-rose-300">
                 {registeredCandidatesError}
               </p>
-            ) : (
+            ) : adminTab === "registered" ? (
               <RegisteredCandidatesTable
                 candidates={registeredCandidates}
                 applications={applications}
               />
+            ) : aiResumeScansLoading ? (
+              <p className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-8 text-center text-sm text-zinc-400">
+                Loading AI resume scans...
+              </p>
+            ) : aiResumeScansError ? (
+              <p role="alert" className="rounded-xl border border-rose-500/30 bg-rose-950/40 p-5 text-sm text-rose-300">
+                {aiResumeScansError}
+              </p>
+            ) : (
+              <AiResumeScansTable scans={aiResumeScans} />
             )}
           </div>
         </div>
