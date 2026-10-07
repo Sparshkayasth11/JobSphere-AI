@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef, type FormEvent } from "react";
 import toast from 'react-hot-toast';
 
-const API_BASE = "https://jobsphere-ai-zxkj.onrender.com";
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL || "https://jobsphere-ai-zxkj.onrender.com";
 
 function getCandidateResumeUrl(resumeUrl?: string): string | null {
   if (!resumeUrl || resumeUrl === "#") return null;
@@ -344,6 +345,34 @@ type Application = {
   resumeUrl?: string;
 };
 
+type RegisteredCandidate = {
+  name: string;
+  email: string;
+  phone: string;
+  profilePicture: string | null;
+  isVerified: boolean;
+  joinedAt: string;
+};
+
+function isRegisteredCandidate(value: unknown): value is RegisteredCandidate {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "name" in value &&
+    typeof value.name === "string" &&
+    "email" in value &&
+    typeof value.email === "string" &&
+    "phone" in value &&
+    typeof value.phone === "string" &&
+    "profilePicture" in value &&
+    (typeof value.profilePicture === "string" || value.profilePicture === null) &&
+    "isVerified" in value &&
+    typeof value.isVerified === "boolean" &&
+    "joinedAt" in value &&
+    typeof value.joinedAt === "string"
+  );
+}
+
 function getCandidateRecommendation(candidate: Application): {
   status: "approve" | "review" | "reject";
   reason: string;
@@ -374,6 +403,107 @@ function getCandidateRecommendation(candidate: Application): {
           }`
         : "No ATS match score is available. Manual review required."),
   };
+}
+
+function RegisteredCandidatesTable({
+  candidates,
+  applications,
+}: {
+  candidates: RegisteredCandidate[];
+  applications: Application[];
+}) {
+  return (
+    <div className="w-full overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 shadow-xl">
+      <table className="w-full min-w-[900px] text-left text-sm text-zinc-300">
+        <thead>
+          <tr>
+            {["Candidate", "Contact", "OTP Status", "Joined", "Applied Jobs"].map(
+              (heading) => (
+                <th
+                  key={heading}
+                  className="border-b border-zinc-800 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-400"
+                >
+                  {heading}
+                </th>
+              ),
+            )}
+          </tr>
+        </thead>
+        <tbody>
+          {candidates.map((candidate) => {
+            const appliedJobs = new Set(
+              applications
+                .filter(
+                  (application) =>
+                    application.email.trim().toLowerCase() ===
+                    candidate.email.toLowerCase(),
+                )
+                .map((application) => application.jobId || application.jobTitle),
+            );
+            const profilePicture = getCandidateResumeUrl(
+              candidate.profilePicture ?? undefined,
+            );
+            return (
+              <tr key={candidate.email} className="hover:bg-zinc-800/30">
+                <td className="border-b border-zinc-800/60 px-4 py-4">
+                  <div className="flex items-center gap-3">
+                    {profilePicture ? (
+                      <img
+                        src={profilePicture}
+                        alt=""
+                        loading="lazy"
+                        className="h-10 w-10 rounded-full border border-zinc-700 object-cover"
+                      />
+                    ) : (
+                      <span className="grid h-10 w-10 place-items-center rounded-full border border-zinc-700 bg-zinc-800 font-semibold text-emerald-300">
+                        {candidate.name.trim().charAt(0).toUpperCase() || "?"}
+                      </span>
+                    )}
+                    <span className="font-medium text-zinc-100">
+                      {candidate.name}
+                    </span>
+                  </div>
+                </td>
+                <td className="border-b border-zinc-800/60 px-4 py-4">
+                  <div>{candidate.email}</div>
+                  <div className="mt-1 text-xs text-zinc-500">
+                    {candidate.phone}
+                  </div>
+                </td>
+                <td className="border-b border-zinc-800/60 px-4 py-4">
+                  <span
+                    className={`rounded-full border px-2.5 py-1 text-xs font-medium ${
+                      candidate.isVerified
+                        ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
+                        : "border-amber-500/20 bg-amber-500/10 text-amber-300"
+                    }`}
+                  >
+                    {candidate.isVerified ? "Verified" : "Pending"}
+                  </span>
+                </td>
+                <td className="border-b border-zinc-800/60 px-4 py-4 text-zinc-400">
+                  {new Date(candidate.joinedAt).toLocaleDateString()}
+                </td>
+                <td className="border-b border-zinc-800/60 px-4 py-4 font-semibold text-zinc-200">
+                  {appliedJobs.size}
+                </td>
+              </tr>
+            );
+          })}
+          {candidates.length === 0 && (
+            <tr>
+              <td
+                colSpan={5}
+                className="px-4 py-8 text-center text-sm text-zinc-500"
+              >
+                No registered candidates yet.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function AdminApplicantsTable({
@@ -747,7 +877,17 @@ export default function Home() {
 const [isAdminView, setIsAdminView] = useState(false);
 const [showAdminModal, setShowAdminModal] = useState(false);
 const [adminPassword, setAdminPassword] = useState("");
+const [adminAuthKey, setAdminAuthKey] = useState("");
+const [adminLoginError, setAdminLoginError] = useState("");
+const [adminLoginLoading, setAdminLoginLoading] = useState(false);
 const [applications, setApplications] = useState<Application[]>([]);
+const [adminTab, setAdminTab] = useState<"applicants" | "registered">("applicants");
+const [registeredCandidates, setRegisteredCandidates] = useState<
+  RegisteredCandidate[]
+>([]);
+const [registeredCandidatesLoading, setRegisteredCandidatesLoading] =
+  useState(false);
+const [registeredCandidatesError, setRegisteredCandidatesError] = useState("");
 const [applicationJob, setApplicationJob] = useState<Job | null>(null);
 const [applicantName, setApplicantName] = useState("");
 const [applicantEmail, setApplicantEmail] = useState("");
@@ -1528,6 +1668,82 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setJobs(initialJobs);
   };
 
+  const authenticateAdmin = async () => {
+    setAdminLoginError("");
+    setAdminLoginLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/users`, {
+        headers: { "x-admin-key": adminPassword },
+      });
+      const result: unknown = await response.json();
+      if (
+        !response.ok ||
+        typeof result !== "object" ||
+        result === null ||
+        !("success" in result) ||
+        result.success !== true
+      ) {
+        const message =
+          typeof result === "object" &&
+          result !== null &&
+          "message" in result &&
+          typeof result.message === "string"
+            ? result.message
+            : "Admin authentication failed.";
+        throw new Error(message);
+      }
+      setAdminAuthKey(adminPassword);
+      setAdminPassword("");
+      setIsAdminView(true);
+      setShowAdminModal(false);
+    } catch (cause) {
+      setAdminLoginError(
+        cause instanceof Error ? cause.message : "Admin authentication failed.",
+      );
+    } finally {
+      setAdminLoginLoading(false);
+    }
+  };
+
+  const loadRegisteredCandidates = async () => {
+    setRegisteredCandidatesLoading(true);
+    setRegisteredCandidatesError("");
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/users`, {
+        headers: { "x-admin-key": adminAuthKey },
+      });
+      const result: unknown = await response.json();
+      if (
+        !response.ok ||
+        typeof result !== "object" ||
+        result === null ||
+        !("success" in result) ||
+        result.success !== true ||
+        !("users" in result) ||
+        !Array.isArray(result.users) ||
+        !result.users.every(isRegisteredCandidate)
+      ) {
+        const message =
+          typeof result === "object" &&
+          result !== null &&
+          "message" in result &&
+          typeof result.message === "string"
+            ? result.message
+            : "Could not load registered candidates.";
+        throw new Error(message);
+      }
+      setRegisteredCandidates(result.users);
+    } catch (cause) {
+      setRegisteredCandidatesError(
+        cause instanceof Error
+          ? cause.message
+          : "Could not load registered candidates.",
+      );
+    } finally {
+      setRegisteredCandidatesLoading(false);
+    }
+  };
+
   const candidates = applications;
   if (isAdminView) {
     return (
@@ -1540,7 +1756,12 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => setIsAdminView(false)}
+                onClick={() => {
+                  setIsAdminView(false);
+                  setAdminAuthKey("");
+                  setAdminTab("applicants");
+                  setRegisteredCandidates([]);
+                }}
                 className="rounded-lg bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-500"
               >
                 Exit Admin View
@@ -1578,11 +1799,54 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
               </div>
             </div>
 
-            <AdminApplicantsTable
-              candidates={candidates}
-              onShortlist={openInterviewScheduler}
-              onDecision={updateCandidateDecision}
-            />
+            <div className="flex flex-wrap gap-2 border-b border-zinc-800 pb-3">
+              <button
+                type="button"
+                onClick={() => setAdminTab("applicants")}
+                className={`rounded-lg px-4 py-2 text-sm font-medium ${
+                  adminTab === "applicants"
+                    ? "bg-emerald-400 text-zinc-950"
+                    : "border border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                }`}
+              >
+                Applicants
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminTab("registered");
+                  void loadRegisteredCandidates();
+                }}
+                className={`rounded-lg px-4 py-2 text-sm font-medium ${
+                  adminTab === "registered"
+                    ? "bg-emerald-400 text-zinc-950"
+                    : "border border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                }`}
+              >
+                Registered Candidates
+              </button>
+            </div>
+
+            {adminTab === "applicants" ? (
+              <AdminApplicantsTable
+                candidates={candidates}
+                onShortlist={openInterviewScheduler}
+                onDecision={updateCandidateDecision}
+              />
+            ) : registeredCandidatesLoading ? (
+              <p className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-8 text-center text-sm text-zinc-400">
+                Loading registered candidates...
+              </p>
+            ) : registeredCandidatesError ? (
+              <p role="alert" className="rounded-xl border border-rose-500/30 bg-rose-950/40 p-5 text-sm text-rose-300">
+                {registeredCandidatesError}
+              </p>
+            ) : (
+              <RegisteredCandidatesTable
+                candidates={registeredCandidates}
+                applications={applications}
+              />
+            )}
           </div>
         </div>
 
@@ -1702,9 +1966,15 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
               >
                 Upload Resume
               </button>
-              <button className="rounded-lg bg-lime-300 px-4 py-2 text-sm font-bold text-zinc-950 transition-colors hover:bg-lime-200">
+              <a
+                href="/login"
+                className="rounded-lg px-3 py-2 text-sm font-bold text-white transition-colors hover:bg-zinc-800"
+              >
+                Log in
+              </a>
+              <a className="rounded-lg bg-lime-300 px-4 py-2 text-sm font-bold text-zinc-950 transition-colors hover:bg-lime-200" href="/signup">
                 Get Started
-              </button>
+              </a>
             </div>
             <button
               type="button"
@@ -1746,6 +2016,20 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
               className="rounded-lg bg-emerald-500 px-4 py-2.5 text-center text-sm font-semibold text-zinc-950 transition-colors hover:bg-emerald-400"
             >
               ✨ Pro Plans
+            </a>
+            <a
+              href="/login"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="rounded-lg border border-zinc-700 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800"
+            >
+              Log in
+            </a>
+            <a
+              href="/signup"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="rounded-lg bg-lime-300 px-4 py-2.5 text-center text-sm font-semibold text-zinc-950"
+            >
+              Get Started
             </a>
             <button
               type="button"
@@ -2569,31 +2853,35 @@ const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
 {showAdminModal && (
   <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", display: "grid", placeItems: "center", zIndex: 100 }}>
     <div style={{ background: "#18181b", padding: "24px", borderRadius: "12px", border: "1px solid #27272a", width: "320px" }}>
-      <h3 style={{ color: "#fff", marginBottom: "12px" }}>Admin Password Required</h3>
+      <h3 style={{ color: "#fff", marginBottom: "12px" }}>Admin Key Required</h3>
       <input 
         type="password" 
-        placeholder="Enter Admin Key" 
+        placeholder="Enter configured admin key" 
         value={adminPassword}
         onChange={(e) => setAdminPassword(e.target.value)}
         style={{ width: "100%", padding: "10px", borderRadius: "6px", background: "#09090b", color: "#fff", border: "1px solid #3f3f46", marginBottom: "12px" }}
       />
+      {adminLoginError && (
+        <p role="alert" className="mb-3 text-sm text-rose-300">
+          {adminLoginError}
+        </p>
+      )}
       <div style={{ display: "flex", gap: "8px" }}>
         <button 
-          onClick={() => {
-            if (adminPassword === "Sparsh@123") {
-              setIsAdminView(true);
-              setShowAdminModal(false);
-              setAdminPassword("");
-            } else {
-              alert("Incorrect Admin Password!");
-            }
-          }}
-          style={{ flex: 1, padding: "10px", background: "#10b981", color: "#000", fontWeight: "bold", borderRadius: "6px", border: "none", cursor: "pointer" }}
+          type="button"
+          disabled={adminLoginLoading}
+          onClick={() => void authenticateAdmin()}
+          style={{ flex: 1, padding: "10px", background: "#10b981", color: "#000", fontWeight: "bold", borderRadius: "6px", border: "none", cursor: adminLoginLoading ? "wait" : "pointer", opacity: adminLoginLoading ? 0.6 : 1 }}
         >
-          Login
+          {adminLoginLoading ? "Checking..." : "Login"}
         </button>
         <button 
-          onClick={() => setShowAdminModal(false)}
+          type="button"
+          onClick={() => {
+            setShowAdminModal(false);
+            setAdminLoginError("");
+            setAdminPassword("");
+          }}
           style={{ padding: "10px", background: "#27272a", color: "#fff", borderRadius: "6px", border: "none", cursor: "pointer" }}
         >
           Cancel

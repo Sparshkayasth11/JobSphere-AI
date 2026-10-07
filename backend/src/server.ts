@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { registerAuthRoutes } from "./authRoutes.js";
 
 // Import resume agent logic
 import { parseResumeText, calculateJobMatch } from "./resumeAgent.js";
@@ -354,6 +355,7 @@ const applyResumeUpload = multer({
     callback(null, true);
   },
 });
+registerAuthRoutes(app, uploadsDirectory);
 
 // =========================
 // HEALTH CHECK ROUTE
