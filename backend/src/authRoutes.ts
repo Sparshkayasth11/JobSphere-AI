@@ -250,25 +250,25 @@ function requestCandidateId(req: Request): string | null {
 }
 
 async function sendSignupOtpEmail(email: string, otp: string): Promise<void> {
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT || 465);
+  const host = process.env.SMTP_HOST || "smtp.gmail.com";
+  const port = 465;
   const user = process.env.SMTP_USER;
   const password = process.env.SMTP_PASS;
   const from = process.env.SMTP_FROM;
-  if (!host || !user || !password || !from) {
+  if (!user || !password || !from) {
     throw new Error(
       "Missing SMTP configuration. Set SMTP_HOST, SMTP_USER, SMTP_PASS, and SMTP_FROM.",
     );
-  }
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error("SMTP_PORT must be a valid port number.");
   }
 
   const transporter = nodemailer.createTransport({
     host,
     port,
-    secure: port === 465,
+    secure: true,
     auth: { user, pass: password },
+    tls: {
+      rejectUnauthorized: false,
+    },
     connectionTimeout: SMTP_SEND_TIMEOUT_MS,
     greetingTimeout: SMTP_SEND_TIMEOUT_MS,
     socketTimeout: SMTP_SEND_TIMEOUT_MS,
