@@ -659,11 +659,17 @@ export function registerAuthRoutes(
               (entry) =>
                 entry.phone === normalizePhone(normalizedLogin),
             );
-       const isPassOk = 
-      (await verifyPassword(password, candidate.passwordHash)) || 
-      password === candidate.passwordHash;
-
-    if (!candidate || !isPassOk) {
+        if (!candidate) {
+          res.status(401).json({
+            success: false,
+            message: "The email/phone or password is incorrect.",
+          });
+          return;
+        }
+        const isPassOk =
+          (await verifyPassword(password, candidate.passwordHash)) ||
+          password === candidate.passwordHash;
+        if (!isPassOk) {
           res.status(401).json({
             success: false,
             message: "The email/phone or password is incorrect.",
